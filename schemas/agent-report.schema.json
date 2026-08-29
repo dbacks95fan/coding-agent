@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent-report.schema.json",
+  "title": "Agent Report",
+  "description": "The Coding Agent's own final structured output. NOTE: the 'validation' block here is what the agent observed during its own session; the driver independently re-runs required_validation and that result — not this one — is authoritative in the final Evidence Package written to disk.",
+  "type": "object",
+  "required": ["workItem", "status", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "workItem": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["candidate_complete", "blocked", "needs_decision", "failed"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "One paragraph, plain language, what was done or why it wasn't."
+    },
+    "acceptanceCriteria": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "evidence"],
+        "properties": {
+          "status": { "type": "string", "enum": ["satisfied", "not_satisfied", "partial"] },
+          "evidence": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "selfReportedValidation": {
+      "type": "object",
+      "description": "Informational only — superseded by the driver's independently-executed results.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["pass", "fail", "not_run"] },
+          "passed": { "type": "integer" },
+          "failed": { "type": "integer" }
+        }
+      }
+    },
+    "filesChanged": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "escalations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue", "decisionRequired"],
+        "properties": {
+          "issue": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "option": { "type": "string" },
+                "impact": { "type": "string" }
+              }
+            }
+          },
+          "recommendation": { "type": "string" },
+          "decisionRequired": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

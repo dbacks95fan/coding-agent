@@ -1,0 +1,34 @@
+# Smallest real end-to-end test candidate for Coding Agent v0.1 against the
+# actual MealFlow (menuapp) repository.
+work_item: MEAL-EMPTY-STATE
+
+objective: >
+  When the recipe library has no recipes yet, show a friendly empty-state
+  message with a clear call to action to add the first recipe, instead of the
+  current plain text.
+
+acceptance_criteria:
+  AC1: >
+    When there are zero recipes, the Recipe Library page shows a message
+    explaining there are no recipes yet.
+  AC2: >
+    That empty state includes a visible link or button that navigates to the
+    Add Recipe page.
+  AC3: >
+    When at least one recipe exists, the empty-state message and its link are
+    not shown.
+
+constraints:
+  - Use the existing client routing and API client (client/src/lib/api.ts).
+  - No authentication.
+  - Support desktop and mobile browsers.
+  - Do not change the recipes API or database schema.
+
+non_goals:
+  - Any change to how recipes are created, edited, or deleted.
+  - Any change to the Groceries page.
+
+required_validation:
+  - build
+  - automated_tests
+  - playwright

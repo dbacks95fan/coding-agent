@@ -1,0 +1,31 @@
+{
+  "name": "coding-agent",
+  "version": "0.1.0",
+  "description": "Coding Agent v0.1 - executes an approved Work Contract against a target repo using the Claude Agent SDK, producing structured evidence.",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc -p tsconfig.json",
+    "run": "tsx src/cli.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.251",
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  },
+  "bin": {
+    "coding-agent": "./dist/cli.js"
+  }
+}

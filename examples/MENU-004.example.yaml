@@ -1,0 +1,28 @@
+# Illustrative example from the design brief — not necessarily runnable as-is
+# against the current menuapp repo (recipe creation already exists there).
+work_item: MENU-004
+
+objective: >
+  Allow a household member to create a recipe.
+
+acceptance_criteria:
+  AC1: User can enter a recipe name.
+  AC2: User can add one or more ingredients.
+  AC3: Missing required fields produce understandable validation errors.
+  AC4: Saved recipes persist after application restart.
+
+constraints:
+  - Use the existing persistence layer.
+  - No authentication.
+  - Support desktop and mobile browsers.
+  - Do not change the existing recipe schema without escalation.
+
+required_validation:
+  - build
+  - automated_tests
+  - playwright
+
+non_goals:
+  - Recipe editing
+  - Recipe deletion
+  - Fry's integration
