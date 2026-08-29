@@ -1,13 +1,21 @@
 # coding-agent (v0.1)
 
-Executes one approved Work Contract against a target git repository using the
-Claude Agent SDK, and produces an independently-verified Evidence Package. Part of
-an experimental Agentic SDLC — see [ARCHITECTURE.md](./ARCHITECTURE.md) for the full
-design and rationale.
+The "Coding Agent" step of an experimental Agentic SDLC (Kanban flow, XP quality
+practices, AI execution, human judgment). Given an approved **Work Contract**
+(YAML) and a target git repository, it implements the contract in an isolated
+worktree using the Claude Agent SDK, then **independently re-runs** whatever
+validation the contract requires — it does not trust its own claim that tests
+pass. Output is one structured Evidence Package, never a self-declared "Done".
 
-This tool does not plan work, does not evaluate whether a result should be
-"Done", and does not talk to Trello. It takes a contract and a repo, and hands
-back structured proof.
+It does not plan work, does not decide whether a result is approved, and does
+not talk to Trello, GitHub, or anything else — see
+[ARCHITECTURE.md](./ARCHITECTURE.md) for the full design and why each boundary
+exists.
+
+**Status**: validated end-to-end against a real story in the
+[MealFlow](https://github.com/dbacks95fan/menuapp) repo — reached
+`candidate_complete` with build, unit, and Playwright gates independently
+passing, then merged after human review.
 
 ## Install
 
