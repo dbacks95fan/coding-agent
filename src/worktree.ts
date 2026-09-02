@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,6 +13,23 @@ function git(args: string[], cwd: string): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
+/**
+ * Where worktrees are created. Defaults to the OS temp dir (fine for local/dev
+ * use, where the caller inspects the worktree on the same machine). Set
+ * CODING_AGENT_WORKTREE_ROOT to a persistent, durable path instead when running
+ * in a container — the container's own /tmp is destroyed with it, so a bind
+ * mount to durable storage (e.g. a NAS volume) is what makes a candidate's work
+ * survive past the container exiting.
+ */
+function worktreeRoot(): string {
+  const configured = process.env.CODING_AGENT_WORKTREE_ROOT;
+  if (configured) {
+    mkdirSync(configured, { recursive: true });
+    return configured;
+  }
+  return tmpdir();
+}
+
 /** Creates an isolated git worktree on a new branch for one work item. */
 export function createWorktree(repoRoot: string, workItem: string, baseBranch: string): Worktree {
   const current = git(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
@@ -20,7 +37,7 @@ export function createWorktree(repoRoot: string, workItem: string, baseBranch: s
     // fine — worktree is created FROM baseBranch regardless of what's currently checked out
   }
 
-  const parent = mkdtempSync(join(tmpdir(), "coding-agent-"));
+  const parent = mkdtempSync(join(worktreeRoot(), "coding-agent-"));
   const path = join(parent, workItem).replace(/\\/g, "/");
   const branch = `agent/${workItem}`;
 

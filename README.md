@@ -96,6 +96,25 @@ rationale.
   this tool after the agent's turn ends, against the resulting code, and that
   result is what's authoritative in the Evidence Package.
 
+## Running in a container (e.g. on a NAS)
+
+```sh
+docker build -t coding-agent:latest .
+docker run --rm \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e CODING_AGENT_WORKTREE_ROOT=/workspaces \
+  -v /volume1/agent-workspaces:/workspaces \
+  -v /volume1/docker/menuapp:/workspace/repo \
+  -v /path/to/contract.yaml:/workspace/contract.yaml:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  coding-agent:latest run --contract /workspace/contract.yaml --repo /workspace/repo
+```
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md#container-deployment) for what's different
+from local use (API-key auth instead of an OAuth login, the Docker-socket mount for
+the `docker_build` gate, and why `CODING_AGENT_WORKTREE_ROOT` matters for a
+container's work to survive past its own exit) and why each one is necessary.
+
 ## Auditing a run
 
 Every run writes `.agent/audit/<work_item>-<runId>.jsonl` and

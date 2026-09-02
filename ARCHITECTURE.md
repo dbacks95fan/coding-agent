@@ -197,6 +197,65 @@ Exit codes: `0` candidate_complete, `2` blocked, `3` needs_decision, `1` failed.
 Orchestrator can shell out to this and treat it exactly like any other deterministic
 CLI tool — no knowledge of the SDK, prompts, or permission model required.
 
+## Container deployment
+
+`Dockerfile` packages the tool to run unattended on any Docker host — e.g. a
+Synology NAS — instead of as a local process on a dev machine, so an Orchestrator
+that itself doesn't run on the same machine as `coding-agent` has something to
+invoke (`docker run ...`) rather than a local `node` subprocess.
+
+Three things change versus local/dev use, each driven by what a container can't
+assume:
+
+1. **Auth**: locally, the SDK rides on *this machine's* already-logged-in `claude`
+   CLI (a claude.ai OAuth session). A fresh container has no such login, and there's
+   no browser to complete an OAuth flow inside one anyway. Set `ANTHROPIC_API_KEY`
+   as an environment variable instead — the CLI/SDK use direct API-key auth when
+   it's present, bypassing OAuth entirely. This is genuinely a different billing
+   path (Anthropic Console API usage, not a claude.ai subscription).
+2. **`docker_build` gate**: running `docker build` *from inside* a container needs
+   either Docker-in-Docker or — what this image is built for — mounting the
+   **host's** `/var/run/docker.sock` into the container, so the containerized
+   `coding-agent` drives the NAS's own Docker engine directly. Images it builds
+   land in the host's Docker, not a nested throwaway daemon. Omit the mount
+   entirely for work items whose `required_validation` doesn't include
+   `docker_build` — the CLI doesn't need Docker access unless that gate is used.
+3. **Where the work survives**: a container is ephemeral; its own filesystem
+   (including the default `/tmp` worktree location) disappears when it exits. Set
+   `CODING_AGENT_WORKTREE_ROOT` to a path backed by a bind-mounted, durable volume
+   (a NAS-side directory) instead — `src/worktree.ts` creates worktrees there
+   rather than in the container's throwaway `/tmp`, so the resulting branch and
+   worktree are still there, inspectable, after the container exits. This is a
+   deliberate choice over the alternative (letting the agent push its work
+   branch to GitHub) — it required no change to the "never push" boundary.
+
+### Building and running
+
+```sh
+docker build -t coding-agent:latest .
+
+docker run --rm \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e CODING_AGENT_WORKTREE_ROOT=/workspaces \
+  -v /volume1/agent-workspaces:/workspaces \
+  -v /volume1/docker/menuapp:/workspace/repo \
+  -v /path/to/contract.yaml:/workspace/contract.yaml:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  coding-agent:latest run --contract /workspace/contract.yaml --repo /workspace/repo
+```
+
+The `/var/run/docker.sock` mount is only needed when the contract's
+`required_validation` includes `docker_build`; omit it otherwise. Whatever invokes
+this (an Orchestrator, a script) is responsible for getting the actual repo clone
+and the generated contract file onto volumes/paths the container can see — this
+tool has no opinion on how they got there, same as it has no opinion on how
+`--repo` and `--contract` got onto local disk in the non-container case.
+
+Verified: a from-scratch image build succeeds, `node`/`git`/`docker`/`claude` are
+all present and on `PATH` inside it, and a full run (schema validation -> pre-flight
+intent check -> blocked result) produces byte-identical behavior to running the
+same contract locally, via bind-mounted repo and contract file.
+
 ## What v0.1 deliberately does not do
 
 - No outer Orchestrator, no Trello polling, no WIP limits.
