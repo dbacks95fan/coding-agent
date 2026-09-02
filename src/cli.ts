@@ -7,6 +7,7 @@ import { runCodingAgent } from "./agentRunner.js";
 import { AuditLog } from "./audit.js";
 import { ContractValidationError, loadContract } from "./contract.js";
 import { assembleEvidence } from "./evidence.js";
+import { verifyIntentIntegrity } from "./preflight.js";
 import type { ValidationGate } from "./types.js";
 import { runIndependentValidation } from "./validators.js";
 import { createWorktree, removeWorktree } from "./worktree.js";
@@ -86,6 +87,30 @@ async function main() {
       JSON.stringify({ status: "failed", summary: `${args.repo} is not a git repository.` }, null, 2),
     );
     process.exit(1);
+  }
+
+  // Chain-of-custody gate: the contract's intent.status/acceptedBy/acceptedAt are
+  // already schema-validated by loadContract() above. What's left is verifying the
+  // accepted intent document hasn't drifted from what the contract actually
+  // recorded. This runs before any worktree is created or any SDK call is made —
+  // per the mandate, a failure here means STOP, do not implement, not "proceed
+  // cautiously".
+  const preflight = verifyIntentIntegrity(contract, args.repo);
+  audit.write("preflight_intent_check", { ok: preflight.ok, reasons: preflight.reasons });
+  if (!preflight.ok) {
+    const blocked = {
+      workItem: contract.work_item,
+      status: "blocked",
+      summary: "Chain-of-custody verification failed before implementation could begin.",
+      contractHash: hash,
+      runId,
+      reasons: preflight.reasons,
+    };
+    const evidencePath = `${args.repo}/.agent/evidence/${contract.work_item}-${runId}.json`;
+    mkdirSync(`${args.repo}/.agent/evidence`, { recursive: true });
+    writeFileSync(evidencePath, JSON.stringify(blocked, null, 2), "utf8");
+    console.log(JSON.stringify(blocked, null, 2));
+    process.exit(2);
   }
 
   const worktree = createWorktree(args.repo, contract.work_item, args.baseBranch);

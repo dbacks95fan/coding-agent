@@ -55,11 +55,34 @@ Prints one JSON Evidence Package to stdout. Exit code: `0` candidate_complete,
 - A `CLAUDE.md` or `AGENTS.md` at the repo root (read into the agent's system
   prompt as repository context — not required, but strongly recommended; without
   one the agent proceeds from direct inspection alone).
+- The document referenced by the contract's `intent.path` (see below) must
+  actually exist in the repo, unchanged since acceptance.
 - npm scripts matching the gate names it knows how to run independently:
   `npm run build`, `npm run test:server`, `npm run test:e2e`, plus a root
   `Dockerfile` for the `docker_build` gate. See `src/validators.ts` — this mapping
   is intentionally a fixed convention, not something the contract or the agent can
   redefine.
+
+## Work Contract v2: intent chain of custody
+
+Every contract must be `schema_version: 2` and carry `intent` (its own acceptance
+record — path, revision, sha256, reviewUrl, status, acceptedBy, acceptedAt) and
+`board` (tracker linkage — provider, workItemId, workItemUrl, workItemType). See
+`examples/*.yaml` for the shape.
+
+Before touching anything, the tool verifies this chain of custody:
+
+- `intent.status === "Accepted"` and `acceptedBy`/`acceptedAt` are present — enforced
+  by schema validation; a contract that fails this is rejected before it's even
+  fully loaded.
+- `intent.sha256` matches the real, current SHA-256 of the file at `intent.path` in
+  the target repo — enforced at runtime (`src/preflight.ts`), since schema
+  validation has no way to check actual repo file content.
+
+Either failure returns `status: "blocked"` immediately — no worktree, no SDK call,
+no cost — with `reasons` explaining exactly what didn't check out. See
+[ARCHITECTURE.md](./ARCHITECTURE.md#v2-intent-chain-of-custody-gate) for the full
+rationale.
 
 ## What it will not do, on purpose
 

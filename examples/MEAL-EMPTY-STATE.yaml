@@ -1,6 +1,25 @@
-# Smallest real end-to-end test candidate for Coding Agent v0.1 against the
-# actual MealFlow (menuapp) repository.
+# Illustrative v2 example — the `intent.sha256` below is a placeholder. A real
+# contract's sha256 must be the actual SHA-256 of the intent document at
+# `intent.path` (relative to the target repo root) at the moment it was
+# accepted; the Coding Agent verifies this at runtime before doing anything
+# else, and refuses to proceed if it doesn't match.
+schema_version: 2
 work_item: MEAL-EMPTY-STATE
+
+intent:
+  path: docs/intents/MEAL-EMPTY-STATE.md
+  revision: "1"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  reviewUrl: "https://example.com/review/MEAL-EMPTY-STATE"
+  status: Accepted
+  acceptedBy: Jane Doe
+  acceptedAt: "2026-09-01T10:00:00Z"
+
+board:
+  provider: trello
+  workItemId: "MEAL-EMPTY-STATE"
+  workItemUrl: "https://trello.com/c/example/meal-empty-state"
+  workItemType: User Story
 
 objective: >
   When the recipe library has no recipes yet, show a friendly empty-state

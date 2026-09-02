@@ -98,6 +98,37 @@ The agent is never given a tool capable of writing to the contract path (enforce
 the `canUseTool` path check above), so "the Coding Agent must not modify this
 contract" is a mechanical guarantee, not just an instruction.
 
+## v2: intent chain-of-custody gate
+
+A Work Contract (`schema_version: 2`) now carries its own acceptance record inline —
+`intent: {path, revision, sha256, reviewUrl, status, acceptedBy, acceptedAt}` — and
+its tracker linkage, `board: {provider, workItemId, workItemUrl, workItemType, ...}`.
+Most of what a naive implementation would need custom code to check is instead
+enforced for free by ordinary JSON Schema validation at `loadContract()` time:
+`intent.status` is a `const: "Accepted"`, and `acceptedBy`/`acceptedAt` are required
+non-empty strings. A contract that doesn't satisfy this never gets past schema
+validation, let alone reaches the agent.
+
+What schema validation *can't* verify — because it has no access to the target
+repository's actual file contents — is whether `intent.sha256` still matches the
+real, current content of the document at `intent.path`. That's `src/preflight.ts`
+(`verifyIntentIntegrity`), run in `cli.ts` immediately after schema validation and
+strictly *before* any worktree is created or any SDK call is made:
+
+1. Resolve `intent.path` relative to `--repo`.
+2. If the file doesn't exist, or its SHA-256 doesn't match `intent.sha256` — the
+   accepted intent has drifted since the contract was approved, or the contract
+   points at the wrong document entirely — stop.
+3. On failure, emit a `blocked` result (workItem, status, summary, contractHash,
+   runId, reasons) directly to stdout and `.agent/evidence/`, exit `2`. No worktree,
+   no agent invocation, no cost incurred for a contract that was never going to be
+   legitimate to act on.
+
+This is the literal reading of "if the Work Contract is contradictory, impossible,
+unsafe, or materially ambiguous, stop and return blocked" applied to the *chain of
+custody* specifically, before it's even applied to the work itself — a forged or
+stale contract doesn't get a chance to waste a real implementation attempt.
+
 ## Evidence is independently verified, not self-reported
 
 The agent's structured final output (`AgentReport`, forced via `outputFormat`)
@@ -133,7 +164,15 @@ never taken as-is from the agent:
 One schema, `schemas/agent-report.schema.json` — evidence-shaped and
 escalation-shaped outputs share a shape (`status` discriminates; escalation-only
 fields are simply absent on a completed report and vice versa). See that file for the
-authoritative shape; matches the examples in the brief.
+authoritative shape; matches the examples in the brief. The agent may self-report
+`discrepancies` (gaps it's aware of between intent and actual result); the driver
+appends its own independently-observed discrepancies (agent claims vs. git diff /
+re-run validation) to the same list in the final Evidence Package — both are
+informational, neither is trusted over the other's actual evidence.
+
+The pre-flight chain-of-custody failure path (above) emits a smaller, separate shape
+— `{workItem, status: "blocked", summary, contractHash, runId, reasons}` — since no
+worktree or agent run exists yet to report `filesChanged`, `validation`, etc. against.
 
 ## Audit trail
 

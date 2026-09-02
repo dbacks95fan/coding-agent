@@ -1,6 +1,24 @@
 # Illustrative example from the design brief — not necessarily runnable as-is
-# against the current menuapp repo (recipe creation already exists there).
+# against the current menuapp repo (recipe creation already exists there), and
+# the intent.sha256 below is a placeholder (see MEAL-EMPTY-STATE.yaml for the
+# real constraint it's standing in for).
+schema_version: 2
 work_item: MENU-004
+
+intent:
+  path: docs/intents/MENU-004.md
+  revision: "1"
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  reviewUrl: "https://example.com/review/MENU-004"
+  status: Accepted
+  acceptedBy: Jane Doe
+  acceptedAt: "2026-01-01T00:00:00Z"
+
+board:
+  provider: trello
+  workItemId: "MENU-004"
+  workItemUrl: "https://trello.com/c/example/menu-004"
+  workItemType: User Story
 
 objective: >
   Allow a household member to create a recipe.

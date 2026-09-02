@@ -51,6 +51,11 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "discrepancies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Self-reported gaps between intended and actually-achieved work."
+    },
     "escalations": {
       "type": "array",
       "items": {

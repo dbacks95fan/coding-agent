@@ -56,6 +56,12 @@ export interface AgentReport {
   assumptions?: string[];
   risks?: string[];
   escalations?: EscalationEntry[];
+  /** Self-reported gaps between what was intended/claimed and what was actually
+   *  achieved (e.g. "AC4 is only partially covered because..."). Distinct from
+   *  the driver's own discrepancies, which compare this report against
+   *  independently observed reality (git diff, re-run validation). Both end up
+   *  in the final Evidence Package's discrepancies list. */
+  discrepancies?: string[];
 }
 
 export interface IndependentValidationResult {

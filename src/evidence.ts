@@ -36,8 +36,10 @@ export function assembleEvidence(
   outcome: AgentRunOutcome,
   validation: Record<string, IndependentValidationResult>,
 ): EvidencePackage {
-  const discrepancies: string[] = [];
   const report = outcome.report;
+  // Seed with the agent's own self-reported gaps; the checks below append
+  // driver-observed discrepancies (agent claims vs. independently observed reality).
+  const discrepancies: string[] = [...(report?.discrepancies ?? [])];
 
   const acceptanceCriteria: EvidencePackage["acceptanceCriteria"] = {};
   for (const acId of Object.keys(contract.acceptance_criteria)) {
