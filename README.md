@@ -86,10 +86,14 @@ rationale.
 
 ## What it will not do, on purpose
 
-- Push, merge, or check out `main`/`master`.
-- Touch Trello, GitHub, or any other MCP-connected service — the sub-session gets
-  zero MCP servers and no ambient settings, regardless of what's configured for
-  whoever runs this tool.
+- Merge, or check out `main`/`master`. It *will* push — but only its own
+  `agent/<workItem>` branch to `origin`, never anything else (see
+  [ARCHITECTURE.md](./ARCHITECTURE.md#pushing-its-own-branch)).
+- Touch Trello or any MCP-connected service — the sub-session gets zero MCP
+  servers and no ambient settings, regardless of what's configured for whoever
+  runs this tool. (Pushing its branch to GitHub is a plain `git push` over
+  whatever credential the environment provides — not an MCP connector, and not
+  Trello either way.)
 - SSH/SCP anywhere, or otherwise touch a deployment target.
 - Write to the Work Contract file, or to its own permission settings.
 - Trust its own claim that tests pass — `required_validation` gates are re-run by
@@ -102,18 +106,18 @@ rationale.
 docker build -t coding-agent:latest .
 docker run --rm \
   -e ANTHROPIC_API_KEY=sk-ant-... \
-  -e CODING_AGENT_WORKTREE_ROOT=/workspaces \
-  -v /volume1/agent-workspaces:/workspaces \
-  -v /volume1/docker/menuapp:/workspace/repo \
+  -v /tmp/repos/<workItem>:/workspace/repo \
   -v /path/to/contract.yaml:/workspace/contract.yaml:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   coding-agent:latest run --contract /workspace/contract.yaml --repo /workspace/repo
 ```
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md#container-deployment) for what's different
-from local use (API-key auth instead of an OAuth login, the Docker-socket mount for
-the `docker_build` gate, and why `CODING_AGENT_WORKTREE_ROOT` matters for a
-container's work to survive past its own exit) and why each one is necessary.
+`/workspace/repo` is a fresh clone made right before the run, not a persistent
+mirror — the repo's already on GitHub, and the branch that matters ends up
+pushed there too. See
+[ARCHITECTURE.md](./ARCHITECTURE.md#container-deployment) for what's different
+from local use (API-key auth instead of an OAuth login, and the Docker-socket
+mount for the `docker_build` gate) and why each one is necessary.
 
 ## Auditing a run
 

@@ -39,8 +39,9 @@ git worktree add <tmp>/agent-<workItem>-<ts> -b agent/<workItem> <baseBranch>
 ```
 
 The agent operates entirely inside that worktree (`cwd` is set to it). It commits
-locally on the branch. It never pushes, never merges, never touches the caller's
-actual working directory or branch.
+locally on the branch, then pushes *only that branch* to `origin` before finishing
+(see "Pushing its own branch" below) — it never merges, never touches `main`/
+`master`, never touches the caller's actual working directory or branch.
 
 ## Permission model (defense in depth)
 
@@ -53,13 +54,33 @@ actual working directory or branch.
    regardless of prompt content.
 3. **`canUseTool` callback** — the actual enforcement point, evaluated on every tool
    call:
-   - `Bash`: deny commands matching `git push`, `git merge`, `git checkout
-     (main|master)`, `git switch (main|master)`, `docker push`, `ssh `, `scp `, bare
-     `curl`/`wget`, or anything referencing the NAS host or Trello API. Local
-     `docker build` / `docker compose build` (required for the `docker_build`
-     validation gate) are explicitly allowed.
+   - `Bash`: deny commands matching `git merge`, `git checkout (main|master)`,
+     `git switch (main|master)`, `docker push`, `ssh `, `scp `, bare `curl`/`wget`,
+     or anything referencing the NAS host or Trello API. Local `docker build` /
+     `docker compose build` (required for the `docker_build` validation gate) are
+     explicitly allowed. `git push` is narrowly allowed — see below.
    - `Write`/`Edit`: deny if the resolved path is outside the worktree root, or if it
      targets the Work Contract file itself, or `.claude/settings*.json`.
+
+### Pushing its own branch
+
+`src/permissions.ts`'s `checkGitPush` allows `git push` only when, after checking
+the literal command text: it doesn't mention `main`/`master` anywhere, doesn't use
+a bulk-push flag (`--all`/`--mirror`/`--tags`), and doesn't name a remote other
+than `origin`. Since the worktree never has `main`/`master` checked out and the
+agent cannot switch to them (the rule above), the only branch a push here could
+meaningfully affect is its own — `agent/<workItem>`.
+
+This was a deliberate reversal of v0.1's original blanket "never push" rule, made
+specifically for stateless/ephemeral execution (a container whose filesystem
+disappears when it exits): if nothing pushes the branch, the work is gone forever
+the moment the container exits, since the driver never pushes on the agent's
+behalf either. The original architecture's actual constraint was "must not merge
+to `main`" — it never said "must not push a non-`main` branch" — so this isn't a
+new hole, just a narrower reading of the same boundary. Verified against a real
+git remote (a local bare repo standing in for GitHub): the agent's branch and
+commit land there exactly as claimed, and a parallel attempt to push `main`/
+`master`/another remote/bulk flags is denied in every case tested.
 4. **`permissionMode: 'default'` with `canUseTool` supplied.** `canUseTool` is the
    programmatic substitute for the interactive permission prompt `'default'` mode
    would otherwise show a human — it's the actual decision-maker described above.
@@ -221,13 +242,15 @@ assume:
    entirely for work items whose `required_validation` doesn't include
    `docker_build` — the CLI doesn't need Docker access unless that gate is used.
 3. **Where the work survives**: a container is ephemeral; its own filesystem
-   (including the default `/tmp` worktree location) disappears when it exits. Set
-   `CODING_AGENT_WORKTREE_ROOT` to a path backed by a bind-mounted, durable volume
-   (a NAS-side directory) instead — `src/worktree.ts` creates worktrees there
-   rather than in the container's throwaway `/tmp`, so the resulting branch and
-   worktree are still there, inspectable, after the container exits. This is a
-   deliberate choice over the alternative (letting the agent push its work
-   branch to GitHub) — it required no change to the "never push" boundary.
+   (including the default `/tmp` worktree location) disappears when it exits.
+   The agent now pushes its own branch to `origin` before finishing (see
+   "Pushing its own branch" above), which is what actually solves this for
+   container use — the branch lives on the real remote, independent of the
+   container's lifetime. `CODING_AGENT_WORKTREE_ROOT` still exists as a way to
+   point worktree creation at a bind-mounted durable volume instead of `/tmp`
+   (useful if you want to inspect a worktree directly without pulling the
+   branch, or for local/non-container use where nothing gets pushed anywhere),
+   but it's no longer the thing making container use viable.
 
 ### Building and running
 
@@ -236,25 +259,29 @@ docker build -t coding-agent:latest .
 
 docker run --rm \
   -e ANTHROPIC_API_KEY=sk-ant-... \
-  -e CODING_AGENT_WORKTREE_ROOT=/workspaces \
-  -v /volume1/agent-workspaces:/workspaces \
-  -v /volume1/docker/menuapp:/workspace/repo \
+  -v /tmp/repos/<workItem>:/workspace/repo \
   -v /path/to/contract.yaml:/workspace/contract.yaml:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   coding-agent:latest run --contract /workspace/contract.yaml --repo /workspace/repo
 ```
 
-The `/var/run/docker.sock` mount is only needed when the contract's
-`required_validation` includes `docker_build`; omit it otherwise. Whatever invokes
-this (an Orchestrator, a script) is responsible for getting the actual repo clone
-and the generated contract file onto volumes/paths the container can see — this
-tool has no opinion on how they got there, same as it has no opinion on how
-`--repo` and `--contract` got onto local disk in the non-container case.
+`/workspace/repo` should be a **fresh clone** of the target repo (it doesn't need
+to be a persistent NAS-side mirror — the repo is already fully on GitHub, clone
+it right before the run and discard it after; the branch that matters ends up
+pushed to `origin`, not sitting in this scratch clone). Whatever invokes this (an
+Orchestrator, a script) is responsible for getting the repo clone and the
+generated contract file onto volumes/paths the container can see, and for
+giving it a real GitHub push credential — this tool has no opinion on how any
+of that got there, same as it has no opinion on how `--repo` and `--contract`
+got onto local disk in the non-container case.
 
 Verified: a from-scratch image build succeeds, `node`/`git`/`docker`/`claude` are
-all present and on `PATH` inside it, and a full run (schema validation -> pre-flight
+all present and on `PATH` inside it, a full run (schema validation -> pre-flight
 intent check -> blocked result) produces byte-identical behavior to running the
-same contract locally, via bind-mounted repo and contract file.
+same contract locally via bind-mounted repo and contract file, and — separately,
+outside the container, against the same built code — a real run against a real
+git remote confirms the agent's branch and commit land there exactly as claimed,
+with pushes to `main`/`master`/other remotes/bulk-push flags all correctly denied.
 
 ## What v0.1 deliberately does not do
 
@@ -265,6 +292,7 @@ same contract locally, via bind-mounted repo and contract file.
   duration) — written to the audit log so it exists for later aggregation, but no
   dashboard, storage, or analysis is built now.
 - No multi-agent / subagent delegation inside the Coding Agent itself.
-- No automatic PR creation or push — the worktree and branch are left on disk by
-  default (pass `--discard-worktree` to clean up instead) for a human or a future
-  Orchestrator step to inspect, push, or open a PR from.
+- No automatic PR creation — the agent pushes its branch, but opening a PR (or
+  merging) is still a human/Orchestrator step. The worktree itself is also left
+  on local disk by default (pass `--discard-worktree` to clean up instead), so
+  it's inspectable in place even though the branch is also already pushed.

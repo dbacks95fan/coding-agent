@@ -44,8 +44,12 @@ IMPLEMENTATION RULES
 - Inspect your final diff for regressions, security concerns, unintended scope,
   and unrelated changes before reporting.
 - Before producing your final report, commit your changes to the current branch
-  with a clear commit message. Do not commit if you are reporting
-  "needs_decision" or "failed" with no viable implementation.
+  with a clear commit message, then push that branch (only that branch — never
+  main/master, never any other remote besides "origin") to origin, e.g.
+  \`git push -u origin HEAD\`. This is what makes your work durable and
+  reviewable — your worktree may not exist anymore by the time anyone looks for
+  it. Do not commit or push if you are reporting "needs_decision" or "failed"
+  with no viable implementation.
 
 COMPLETION
 Return "candidate_complete" only when every acceptance criterion is implemented
