@@ -4,9 +4,10 @@
   "title": "Work Contract",
   "description": "Immutable (from the Coding Agent's perspective) definition of one unit of work, produced by the Planner.",
   "type": "object",
-  "required": ["work_item", "objective", "acceptance_criteria", "required_validation"],
+  "required": ["schema_version", "work_item", "objective", "acceptance_criteria", "required_validation", "intent", "board"],
   "additionalProperties": false,
   "properties": {
+    "schema_version": { "const": 2 },
     "work_item": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
@@ -56,6 +57,22 @@
       "items": { "type": "string" },
       "default": [],
       "description": "Planner-authored hints about when this work item should NOT be silently decided by the Coding Agent."
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "revision", "sha256", "reviewUrl", "status", "acceptedBy", "acceptedAt"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 }, "revision": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "reviewUrl": { "type": "string", "minLength": 1 }, "status": { "const": "Accepted" }, "acceptedBy": { "type": "string", "minLength": 1 }, "acceptedAt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "board": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "workItemId", "workItemUrl", "workItemType"],
+      "properties": {
+        "provider": { "enum": ["trello", "jira", "azure_devops", "other"] }, "workItemId": { "type": "string", "minLength": 1 }, "workItemUrl": { "type": "string", "minLength": 1 }, "workItemType": { "enum": ["User Story", "Feature", "Epic", "Technical Enabler"] }, "parentWorkItemId": { "type": "string" }, "parentWorkItemUrl": { "type": "string" }
+      }
     }
   }
 }

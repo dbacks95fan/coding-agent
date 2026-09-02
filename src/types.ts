@@ -1,6 +1,7 @@
 export type ValidationGate = "build" | "automated_tests" | "playwright" | "docker_build";
 
 export interface WorkContract {
+  schema_version: 2;
   work_item: string;
   objective: string;
   acceptance_criteria: Record<string, string>;
@@ -10,6 +11,23 @@ export interface WorkContract {
   non_goals?: string[];
   required_validation: ValidationGate[];
   escalation_conditions?: string[];
+  intent: {
+    path: string;
+    revision: string;
+    sha256: string;
+    reviewUrl: string;
+    status: "Accepted";
+    acceptedBy: string;
+    acceptedAt: string;
+  };
+  board: {
+    provider: "trello" | "jira" | "azure_devops" | "other";
+    workItemId: string;
+    workItemUrl: string;
+    workItemType: "User Story" | "Feature" | "Epic" | "Technical Enabler";
+    parentWorkItemId?: string;
+    parentWorkItemUrl?: string;
+  };
 }
 
 export type AgentStatus = "candidate_complete" | "blocked" | "needs_decision" | "failed";
