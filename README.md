@@ -86,38 +86,25 @@ rationale.
 
 ## What it will not do, on purpose
 
-- Merge, or check out `main`/`master`. It *will* push — but only its own
-  `agent/<workItem>` branch to `origin`, never anything else (see
-  [ARCHITECTURE.md](./ARCHITECTURE.md#pushing-its-own-branch)).
-- Touch Trello or any MCP-connected service — the sub-session gets zero MCP
-  servers and no ambient settings, regardless of what's configured for whoever
-  runs this tool. (Pushing its branch to GitHub is a plain `git push` over
-  whatever credential the environment provides — not an MCP connector, and not
-  Trello either way.)
+- Push, merge, or check out `main`/`master`.
+- Touch Trello, GitHub, or any other MCP-connected service — the sub-session gets
+  zero MCP servers and no ambient settings, regardless of what's configured for
+  whoever runs this tool.
 - SSH/SCP anywhere, or otherwise touch a deployment target.
 - Write to the Work Contract file, or to its own permission settings.
 - Trust its own claim that tests pass — `required_validation` gates are re-run by
   this tool after the agent's turn ends, against the resulting code, and that
   result is what's authoritative in the Evidence Package.
 
-## Running in a container (e.g. on a NAS)
+## Running today: local process, invoked by `orchestrator`
 
-```sh
-docker build -t coding-agent:latest .
-docker run --rm \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
-  -v /tmp/repos/<workItem>:/workspace/repo \
-  -v /path/to/contract.yaml:/workspace/contract.yaml:ro \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  coding-agent:latest run --contract /workspace/contract.yaml --repo /workspace/repo
-```
-
-`/workspace/repo` is a fresh clone made right before the run, not a persistent
-mirror — the repo's already on GitHub, and the branch that matters ends up
-pushed there too. See
-[ARCHITECTURE.md](./ARCHITECTURE.md#container-deployment) for what's different
-from local use (API-key auth instead of an OAuth login, and the Docker-socket
-mount for the `docker_build` gate) and why each one is necessary.
+This runs as a local `node` subprocess on the same machine as `orchestrator`
+(Trello Conductor) — see that project's `src/codingAgent/runCodingAgent.ts`,
+which spawns it exactly per the CLI usage above. There's no container packaging
+or remote deployment right now; an earlier attempt at NAS/Docker deployment was
+reverted (see [ARCHITECTURE.md](./ARCHITECTURE.md) — "No container packaging" —
+for why) and could be revisited later, but isn't part of the currently-running
+setup.
 
 ## Auditing a run
 
