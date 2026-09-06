@@ -12,6 +12,23 @@ not talk to Trello, GitHub, or anything else — see
 [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design and why each boundary
 exists.
 
+## Operating documentation
+
+The current implementation and its Work Contract v2 behavior are documented in
+`ARCHITECTURE.md`. The agent’s versioned operating contract and the planned
+alignment with the wider intent → spec → plan lifecycle are documented separately:
+
+- [Build instructions](docs/BUILD_INSTRUCTIONS.md)
+- [Operating contract](docs/OPERATING_CONTRACT.md)
+- [Artifact contracts](docs/ARTIFACTS.md)
+- [Conductor and Evaluator integration](docs/INTEGRATION.md)
+- [Security and safety requirements](docs/SECURITY.md)
+- [Test strategy](docs/TEST_STRATEGY.md)
+- [Decisions and migration boundaries](docs/DECISIONS.md)
+
+Those documents preserve v0.1 behavior while specifying the next compatible
+contract version; they do not claim that its new inputs are implemented today.
+
 **Status**: validated end-to-end against a real story in the
 [MealFlow](https://github.com/dbacks95fan/menuapp) repo — reached
 `candidate_complete` with build, unit, and Playwright gates independently
