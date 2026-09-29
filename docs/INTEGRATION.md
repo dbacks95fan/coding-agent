@@ -5,8 +5,8 @@
 The Conductor selects the work item, validates workflow state, supplies the contract and repository, controls concurrency/retries, and updates Trello. The Coding Agent only runs the bounded implementation assignment and returns a structured result.
 
 ```text
-Human-approved Design -> Implementation Planning -> Ready for Build
-  -> Conductor dispatches Coding Agent
+Prioritized -> Spec & Design -> human accepts spec.md and work contract
+  -> card enters Execution -> Conductor dispatches Coding Agent
   -> Candidate + independent validation evidence
   -> Conductor dispatches read-only Evaluator
   -> Human Approval -> Release
@@ -22,4 +22,4 @@ The Conductor must associate each attempt with a run ID and retain the contract 
 
 ## Compatibility
 
-Current local-process invocation and Work Contract v2 remain supported facts. Containerization, remote worktree persistence, branch pushing, and Conductor v3 dispatch are separate future work; this documentation does not authorize or claim them.
+Current local-process invocation and Work Contract v2 remain supported facts. Work Contract v3 removes the separate `plan.md`: sectioned `spec.md` is the human-reviewed specification and implementation plan, while the YAML contract remains the frozen machine input. Containerization, remote worktree persistence, branch pushing, and Conductor v3 dispatch are separate future work; this documentation does not authorize or claim them.
