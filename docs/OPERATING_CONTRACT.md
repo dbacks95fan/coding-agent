@@ -10,7 +10,7 @@ The implemented interface accepts Work Contract v2. Its `intent` block includes 
 
 ## Target contract: versioned evolution
 
-A future Work Contract v3 must add immutable references to the approved specification and implementation plan while retaining the intent reference:
+A future Work Contract v3 must add immutable references to the approved specification and policy profile while retaining the intent reference:
 
 ```json
 {
@@ -18,7 +18,7 @@ A future Work Contract v3 must add immutable references to the approved specific
   "work_item": "INT-MF-0042",
   "intent": { "path": ".agent/work/INT-MF-0042/intent.md", "commit": "sha", "sha256": "hash" },
   "spec": { "path": ".agent/work/INT-MF-0042/spec.md", "commit": "sha", "sha256": "hash", "approvedBy": "id", "approvedAt": "RFC-3339" },
-  "plan": { "path": ".agent/work/INT-MF-0042/plan.md", "commit": "sha", "sha256": "hash", "approvedBy": "id", "approvedAt": "RFC-3339" },
+  "policyProfile": { "id": "MF-DEFAULT", "version": 1, "sha256": "hash" },
   "acceptance_criteria": [],
   "required_validation": []
 }
@@ -30,7 +30,7 @@ This is a target schema, not a claim of current support. A v3 implementation mus
 
 - Contract schema and approval records are valid.
 - Frozen intent exists and matches its recorded hash.
-- For v3, spec and plan each exist, match their recorded hashes, are approved, and identify the same work item.
+- For v3, `spec.md` exists, matches its recorded hash, is approved, identifies the same work item, and contains the implementation and validation plan. The policy profile and work contract must also match their recorded immutable references.
 - Target is a Git repository with an allowed base branch and a writable isolated worktree.
 - Required validation gates are known and executable for the target repository.
 
