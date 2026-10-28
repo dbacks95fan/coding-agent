@@ -8,7 +8,9 @@ param(
     [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\menuapp_nas'),
     [string]$RemoteUser = 'DockerDeploy',
     [string]$RemoteFile = '/volume2/docker/coding-agent/.runtime.env',
-    [string]$LocalFile = (Join-Path (Join-Path $PSScriptRoot '..') '.runtime.env')
+    # Defaults to .runtime.env at the repository root. Resolved in the body: Windows PowerShell 5.1
+    # leaves $PSScriptRoot empty while evaluating parameter defaults under -File.
+    [string]$LocalFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +75,7 @@ function Send-EnvText {
 
 # Dot-sourcing this file (as the tests do) only defines the functions above.
 if ($MyInvocation.InvocationName -ne '.') {
+    if (-not $LocalFile) { $LocalFile = Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime.env' }
     if (-not (Test-Path -LiteralPath $LocalFile)) { throw "$LocalFile does not exist. Copy .env.example to it and fill it in." }
     $values = Read-EnvFile $LocalFile
     $problems = Test-RuntimeSetting -Values $values

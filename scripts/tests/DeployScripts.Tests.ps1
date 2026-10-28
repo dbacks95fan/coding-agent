@@ -49,6 +49,25 @@ Describe 'deploy-synology' {
 }
 
 Describe 'set-nas-secrets' {
+    BeforeAll {
+        function Invoke-SecretsScript {
+            # Runs the script as an operator does (-File). Output goes through files because, in
+            # Windows PowerShell 5.1, redirecting a child's stderr inside Pester raises instead.
+            param([string[]]$Arguments)
+            $script = Join-Path (Split-Path -Parent $PSScriptRoot) 'set-nas-secrets.ps1'
+            $out = [System.IO.Path]::GetTempFileName()
+            $err = [System.IO.Path]::GetTempFileName()
+            try {
+                $argumentList = @('-NoProfile', '-File', "`"$script`"") + $Arguments
+                $process = Start-Process -FilePath 'powershell' -ArgumentList $argumentList -NoNewWindow -Wait -PassThru `
+                    -RedirectStandardOutput $out -RedirectStandardError $err
+                [pscustomobject]@{ ExitCode = $process.ExitCode; Output = (Get-Content -LiteralPath $out, $err -Raw) -join "`n" }
+            }
+            finally {
+                Remove-Item -LiteralPath $out, $err -Force
+            }
+        }
+    }
     BeforeEach {
         $script:good = [ordered]@{
             ANTHROPIC_API_KEY      = 'sk-ant-real-looking-value'
@@ -78,6 +97,27 @@ Describe 'set-nas-secrets' {
     It 'refuses a /volume1 path' {
         $good['CODING_AGENT_WORK_ROOT'] = '/volume1/docker/x'
         Test-RuntimeSetting -Values $good | Should -Contain 'CODING_AGENT_WORK_ROOT points at /volume1; this service lives on /volume2'
+    }
+
+    It 'refuses an incomplete file when run as a script, without contacting the NAS' {
+        # Runs the script the way an operator does (-File), which dot-sourcing cannot exercise.
+        $file = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid())
+        try {
+            [System.IO.File]::WriteAllText($file, "ANTHROPIC_API_KEY=replace-with-an-anthropic-api-key`n")
+            $result = Invoke-SecretsScript -Arguments @('-LocalFile', "`"$file`"", '-NasHost', 'invalid.example')
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'PROBLEM  ANTHROPIC_API_KEY is still the placeholder'
+            $result.Output | Should -Match 'Nothing was sent to the NAS'
+        }
+        finally {
+            Remove-Item -LiteralPath $file -Force
+        }
+    }
+
+    It 'finds .runtime.env at the repository root by default' {
+        $result = Invoke-SecretsScript -Arguments @('-NasHost', 'invalid.example')
+        $result.Output | Should -Not -Match 'Cannot bind argument'
+        $result.Output | Should -Match '(\.runtime\.env does not exist|PROBLEM|Saved)'
     }
 
     It 'reads NAME=value lines, skipping comments and a byte order mark' {
