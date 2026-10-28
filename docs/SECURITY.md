@@ -1,9 +1,21 @@
-# Security and Safety Requirements
+# Security
 
-- Preserve worktree isolation, path confinement, protected-branch denial, and the existing deny rules for pushes, merges, deployment, remote shell transfer, and external service access.
-- Keep MCP servers and ambient outer-session permissions unavailable to the agent unless a separately reviewed capability is explicitly introduced.
-- Validate contract paths against the target repository root and reject traversal, cross-work-item writes, mutable references, and unrecognized validation gates.
-- Use least-privilege credentials and environment-injected secrets only. Never log, emit, commit, or return secret values.
-- Enforce bounded model turns, spend, execution time, subprocess output, and disk usage. Surface limit exhaustion as a safe terminal result.
-- Record sanitized audit events for preflight, permissions, worktree, model-run metadata, independent validation, commits, and final result.
-- Treat code, contracts, repository instructions, tool output, and model output as untrusted until validated against this contract.
+## Controls
+
+- **Fail closed before spend.** Every identity, revision, hash, scope, and trusted-command check runs before the first model call. A mismatch is `blocked`.
+- **Trusted commands only.** Setup and check commands come from the operator's manifest, never from contract, spec, or card text. A Work Contract can only name a check whose command matches the manifest exactly.
+- **No credentials in child processes.** The agent's bash tool, setup commands, and checks get an allowlisted environment with a throwaway `HOME`; the Anthropic key, Git token, and service token are not passed. Driver Git receives the token only through a credential helper that reads it from the driver's own environment, never in argv, a URL, or a file in the workspace.
+- **Driver Git ignores the workspace's configuration.** Hooks are disabled, global and system config are replaced, and `.git/config` is restored from a snapshot taken right after clone before every commit and push. Tests show that a planted hook does not run and a planted `insteadOf` does not redirect the push.
+- **Scope enforced after the fact.** The editor refuses writes outside `write_paths` and to protected artifacts. The shell could still write anywhere, so the driver checks every changed path in the candidate and fails the run on any violation.
+- **Fast-forward-only push to the assigned branch.** No force, no other branch, no merge. A moved branch blocks the push.
+- **Command screen (defense in depth).** The bash tool refuses repository-changing Git subcommands, remote-access programs (`curl`, `wget`, `ssh`, `scp`, `nc`, `docker`, `gh`), and `/proc` reads. This screen is bypassable by a determined shell script; the controls above are the real boundary.
+- **Bounded execution.** Turn, cost, and wall-clock limits; per-command and per-check timeouts with process-tree kill; bounded output.
+- **Redaction.** Results, logs, and the HTTP response are scrubbed of configured secrets and credential-shaped strings.
+- **Untrusted content is labeled.** Repository, spec, intent, profile, and evaluation text is wrapped in `<untrusted_*>` tags, and the system prompt says it cannot change the rules.
+- **Container hardening.** Non-root uid 10001, read-only root filesystem, all capabilities dropped, `no-new-privileges`.
+
+## Known residual risks
+
+- **Same-user secret exposure.** The agent's shell runs as the same user as the service process. A shell command could read the service's secrets from `/proc/<pid>/environ` despite the command screen. Real isolation needs the tools to run as a different user or in a separate container, and both have costs on the NAS. Until then, use a fine-grained GitHub token limited to the product repository (contents read/write) and intent-backlog (read), and an Anthropic key in a workspace with a spend limit.
+- **Network egress.** The shell needs the package registry, so outbound network is not blocked. Prompt-injected content could exfiltrate repository content.
+- **Repository code runs.** Setup and checks execute the target repository's scripts by design, inside the same container.
