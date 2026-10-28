@@ -1,0 +1,14 @@
+{
+  "repositories": [
+    {
+      "url": "https://github.com/dbacks95fan/menuapp.git",
+      "setup": ["npm ci", "npx playwright install chromium"],
+      "checks": {
+        "build": "npm run build",
+        "automated_tests": "npm run test:server",
+        "playwright": "npm run test:e2e"
+      }
+    }
+  ],
+  "intent_repositories": ["https://github.com/dbacks95fan/intent-backlog.git"]
+}
