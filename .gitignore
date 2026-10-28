@@ -3,3 +3,4 @@ dist/
 *.log
 .runtime.env
 deployment-packages/
+testResults.xml

@@ -20,6 +20,7 @@
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
     "check:schema-sync": "node scripts/check-schema-sync.mjs",
     "test:live": "node --import tsx --test src/live.e2e.ts",
+    "test:deploy": "powershell -NoProfile -Command \"Import-Module Pester -MinimumVersion 6.0; Invoke-Pester -Path scripts/tests -CI\"",
     "serve": "node dist/cli.js serve"
   },
   "dependencies": {

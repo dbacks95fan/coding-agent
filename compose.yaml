@@ -2,16 +2,17 @@
 # ABOUTME: Runs the Coding Agent service on the NAS with a read-only root, no capabilities, and data under /volume2.
 services:
   coding-agent:
-    build: .
     image: "${CODING_AGENT_IMAGE:-coding-agent:local}"
     container_name: coding-agent
     restart: unless-stopped
-    ports:
-      - "${CODING_AGENT_HTTP_PORT:-8081}:8080"
+    # Host networking: this NAS drops bridge-network NAT for outbound traffic, which the
+    # agent needs for GitHub, the Anthropic API, and package registries. The service
+    # listens on 8081 because the Evaluator owns 8080.
+    network_mode: host
     env_file:
       - ./.runtime.env
     environment:
-      PORT: "8080"
+      PORT: "8081"
       CODING_AGENT_WORK_ROOT: /work
       CODING_AGENT_MANIFEST: /config/manifest.json
       # Shared caches so each run does not re-download dependencies and browsers.
@@ -21,10 +22,6 @@ services:
       - "${CODING_AGENT_DATA:-/volume2/docker/coding-agent-data}/work:/work"
       - "${CODING_AGENT_DATA:-/volume2/docker/coding-agent-data}/cache:/cache"
       - ./manifest.json:/config/manifest.json:ro
-    # Docker's embedded resolver cannot reach the NAS resolver from a bridge network.
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
     read_only: true
     tmpfs:
       - /tmp
@@ -38,7 +35,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:8081/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 5s

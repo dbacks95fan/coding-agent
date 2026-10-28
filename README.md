@@ -4,7 +4,7 @@ The Coding Agent for the [Agentic SDLC](https://github.com/dbacks95fan/agentic-s
 
 It never approves, merges, releases, moves Trello cards, or changes the intent, policy profile, spec, or Work Contract. `candidate_complete` means "ready for the independent Evaluator", not "done".
 
-The normative contract is `agentic-sdlc` (Stage Contracts §4 Execution, Artifacts, Workflow, Governance, and `schemas/lifecycle-contracts.schema.json`). This repository vendors that schema byte-for-byte; `npm run check:schema-sync` confirms it matches a sibling checkout.
+The normative contract is `agentic-sdlc` (Stage Contracts Â§4 Execution, Artifacts, Workflow, Governance, and `schemas/lifecycle-contracts.schema.json`). This repository vendors that schema byte-for-byte; `npm run check:schema-sync` confirms it matches a sibling checkout.
 
 ## How a run works
 
@@ -39,7 +39,7 @@ node dist/cli.js self-test
 | --- | --- | --- |
 | `GET /health` | none | `200 {"status":"ok","busy":bool}` |
 | `POST /invocations` | Bearer | Body is a StageInvocation. `202` starts it; resubmitting the same body is idempotent; different content for the same ID or a second concurrent run returns `409`. |
-| `GET /invocations/{id}` | Bearer | `{"state":"running"}` or `{"state":"done","stage_result":…,"evidence_package":…,"diagnostics":…}` |
+| `GET /invocations/{id}` | Bearer | `{"state":"running"}` or `{"state":"done","stage_result":â€¦,"evidence_package":â€¦,"diagnostics":â€¦}` |
 | `POST /self-test` | Bearer | Toolchain, Git access to every manifest repository, and one tiny model request. `200` all pass, `503` otherwise. |
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for what the Conductor must send and verify.
@@ -53,7 +53,7 @@ Environment variables (see `.env.example`):
 | `ANTHROPIC_API_KEY` | required | Claude API key |
 | `CODING_AGENT_GIT_TOKEN` (or `GITHUB_TOKEN`) | none | Token used only by the driver's own Git calls |
 | `CODING_AGENT_API_TOKEN` | required for `serve` | Bearer token the Conductor sends |
-| `CODING_AGENT_MANIFEST` | `/etc/coding-agent/manifest.json` | Trusted repositories, setup, and check commands ([example](config/manifest.example.json)) |
+| `CODING_AGENT_MANIFEST` | `/etc/coding-agent/manifest.json` | Trusted repositories, setup, and check commands ([MealFlow](config/manifest.json)) |
 | `CODING_AGENT_MODEL` / `CODING_AGENT_EFFORT` | `claude-opus-5-5` / `high` | Execution-plane model and effort |
 | `CODING_AGENT_SERVER_SIDE_FALLBACK` | `on` | On a policy refusal the API retries the turn on a fallback model; the model that answered is recorded |
 | `CODING_AGENT_MAX_TURNS` / `_MAX_COST_USD` / `_MAX_RUNTIME_MIN` | `60` / `5` / `30` | Run limits; hitting one returns `blocked` |
@@ -64,8 +64,14 @@ Environment variables (see `.env.example`):
 
 ## Deploying on the NAS
 
-The container never runs the Claude Code CLI (it cannot run on the NAS kernel); it calls the Messages API with an API key. `compose.yaml` runs it read-only, with all capabilities dropped and data under `/volume2/docker/coding-agent-data`. The installer must confirm `GET /health` returns `200` and `POST /self-test` passes before the deployment is reported working.
+The container never runs the Claude Code CLI, which cannot run on the NAS's 3.10 kernel; it calls the Messages API with an API key. It runs as uid 10001 with a read-only root, no capabilities, host networking on port 8081 (bridge NAT drops outbound traffic on this NAS, and the Evaluator owns 8080), and data under `/volume2/docker/coding-agent-data`.
 
+1. Copy `.env.example` to `.runtime.env` (gitignored) and fill in `ANTHROPIC_API_KEY`, `CODING_AGENT_GIT_TOKEN` (fine-grained: contents read/write on the product repository, read on intent-backlog), and a random `CODING_AGENT_API_TOKEN` of at least 32 characters.
+2. `scripts/set-nas-secrets.ps1` checks that file and writes it to `/volume2/docker/coding-agent/.runtime.env` (mode 600) over SSH stdin. Values are never printed or put on a command line.
+3. `scripts/deploy-synology.ps1` builds the image from a committed revision on this PC, gzips it with the compose file, installer, and `config/manifest.json`, stages it under `/volume2/docker/coding-agent-data/incoming` (not `/tmp`, which is a RAM disk smaller than the image), and runs `scripts/install-on-nas.sh`.
+4. The installer refuses to change anything if a secret is missing, then loads the image, starts it with the NAS's `docker-compose` 1.28, and reports success only when `GET /health` returns `200` and `POST /self-test` passes. The self-test makes one tiny paid model request.
+
+Defaults: host `10.100.10.10`, user `DockerDeploy`, key `~/.ssh/menuapp_nas`. `npm run test:deploy` runs the Pester tests for these scripts.
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): design and why each boundary exists
