@@ -1,31 +1,40 @@
 {
   "name": "coding-agent",
-  "version": "0.1.0",
-  "description": "Coding Agent v0.1 - executes an approved Work Contract against a target repo using the Claude Agent SDK, producing structured evidence.",
-  "main": "index.js",
-  "directories": {
-    "example": "examples"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc -p tsconfig.json",
-    "run": "tsx src/cli.ts"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "version": "0.2.0",
+  "description": "Coding Agent for the Agentic SDLC Execution stage: consumes a StageInvocation 1.1, implements the accepted Work Contract v3 on the assigned work branch, and returns a canonical StageResult and Evidence Package.",
+  "license": "MIT",
   "type": "module",
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.251",
-    "ajv": "^8.20.0",
-    "yaml": "^2.9.0"
-  },
-  "devDependencies": {
-    "@types/node": "^26.4.0",
-    "tsx": "^4.23.12",
-    "typescript": "^5.9.3"
+  "engines": {
+    "node": ">=24"
   },
   "bin": {
     "coding-agent": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --import tsx --test --test-concurrency=1 \"src/**/*.test.ts\"",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
+    "check:schema-sync": "node scripts/check-schema-sync.mjs",
+    "test:live": "node --import tsx --test src/live.e2e.ts",
+    "serve": "node dist/cli.js serve"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.4.0",
+    "eslint": "^10.0.1",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
   }
 }
