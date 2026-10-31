@@ -73,6 +73,7 @@ Describe 'set-nas-secrets' {
             ANTHROPIC_API_KEY                       = 'sk-ant-real-looking-value'
             CODING_AGENT_GITHUB_APP_ID              = '5555873'
             CODING_AGENT_GITHUB_APP_INSTALLATION_ID = '177232772'
+            CODING_AGENT_INTENT_TOKEN               = 'github_pat_read_only_looking_value'
             CODING_AGENT_API_TOKEN                  = 'x' * 40
         }
     }
@@ -87,6 +88,7 @@ Describe 'set-nas-secrets' {
         $problems | Should -Contain 'ANTHROPIC_API_KEY is not set'
         $problems | Should -Contain 'CODING_AGENT_GITHUB_APP_ID is not set'
         $problems | Should -Contain 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID is not set'
+        $problems | Should -Contain 'CODING_AGENT_INTENT_TOKEN is not set'
         $problems | Should -Contain 'CODING_AGENT_API_TOKEN is shorter than 32 characters'
         ($problems -join ' ') | Should -Not -Match 'tiny-secret-value'
     }

@@ -59,9 +59,14 @@ test("secretValues lists every configured credential, including the GitHub App k
     const config = loadConfig({
       ...appEnv,
       ANTHROPIC_API_KEY: "sk-ant-key-123456",
+      CODING_AGENT_INTENT_TOKEN: "github_pat_intent_123",
       CODING_AGENT_API_TOKEN: "service-token-123",
     });
-    assert.deepEqual(secretValues(config).sort(), [privateKey, "service-token-123", "sk-ant-key-123456"].sort());
+    assert.equal(config.intentToken, "github_pat_intent_123");
+    assert.deepEqual(
+      secretValues(config).sort(),
+      [privateKey, "github_pat_intent_123", "service-token-123", "sk-ant-key-123456"].sort(),
+    );
   });
 });
 

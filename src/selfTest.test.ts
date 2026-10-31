@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { loadConfig } from "./config.js";
 import type { GitAccess } from "./git.js";
-import { githubAccessChecks, runSelfTest } from "./selfTest.js";
+import { githubAccessChecks, judgeReadOnlyProbe, runSelfTest } from "./selfTest.js";
 import { buildScenario, removeDir, testShell } from "./testSupport.js";
 
 test("passes when the toolchain, remotes, and model probe all work", async () => {
@@ -50,7 +50,7 @@ const GITHUB_MANIFEST = {
   intent_repositories: ["https://github.com/dbacks95fan/intent-backlog.git", "file:///C:/local/intents.git"],
 };
 
-test("asks the GitHub App for write and read tokens on targets and read on intent repositories", async () => {
+test("asks the GitHub App for write and read tokens on target repositories only", async () => {
   const requests: [string, GitAccess][] = [];
   const results = await githubAccessChecks(
     GITHUB_MANIFEST,
@@ -65,15 +65,14 @@ test("asks the GitHub App for write and read tokens on targets and read on inten
   assert.deepEqual(requests, [
     ["https://github.com/dbacks95fan/mealflow.git", "write"],
     ["https://github.com/dbacks95fan/mealflow.git", "read"],
-    ["https://github.com/dbacks95fan/intent-backlog.git", "read"],
   ]);
   assert.ok(results.every((r) => r.outcome === "pass"));
-  assert.equal(results.length, 3, "the local intent repository needs no token");
+  assert.equal(results.length, 2, "intent repositories use their own token, checked separately");
 });
 
 test("fails each GitHub check when no app is configured or a token is refused", async () => {
   const unconfigured = await githubAccessChecks(GITHUB_MANIFEST, undefined, []);
-  assert.equal(unconfigured.length, 3);
+  assert.equal(unconfigured.length, 2);
   assert.ok(unconfigured.every((r) => r.outcome === "fail" && /No GitHub App is configured/.test(r.detail)));
 
   const leaked = "ghs_leaked_value_in_error_123456";
@@ -89,7 +88,21 @@ test("fails each GitHub check when no app is configured or a token is refused", 
   );
   assert.deepEqual(
     refused.map((r) => r.outcome),
-    ["fail", "pass", "pass"],
+    ["fail", "pass"],
   );
   assert.ok(!JSON.stringify(refused).includes(leaked));
+});
+
+test("the read-only probe passes only when GitHub refuses the push", () => {
+  assert.match(
+    judgeReadOnlyProbe(new Error("git push failed: remote: Write access to repository not granted.")),
+    /refused/,
+  );
+  assert.match(judgeReadOnlyProbe(new Error("remote: Permission to x/y.git denied to someone.")), /refused/);
+  assert.match(judgeReadOnlyProbe(new Error("The requested URL returned error: 403")), /refused/);
+  assert.throws(() => judgeReadOnlyProbe(undefined), /accepted, so it can write/);
+  assert.throws(
+    () => judgeReadOnlyProbe(new Error("Could not resolve host: github.com")),
+    /could not reach GitHub: Could not resolve host/,
+  );
 });

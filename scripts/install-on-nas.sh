@@ -25,7 +25,8 @@ image=$(sed -n 's/^image=//p' manifest.txt)
 
 # Secrets first: a deployment that cannot start must not replace one that can.
 [ -f "$secrets" ] || fail "missing $secrets (run scripts/set-nas-secrets.ps1 from the workstation)"
-for name in ANTHROPIC_API_KEY CODING_AGENT_GITHUB_APP_ID CODING_AGENT_GITHUB_APP_INSTALLATION_ID CODING_AGENT_API_TOKEN; do
+for name in ANTHROPIC_API_KEY CODING_AGENT_GITHUB_APP_ID CODING_AGENT_GITHUB_APP_INSTALLATION_ID \
+  CODING_AGENT_INTENT_TOKEN CODING_AGENT_API_TOKEN; do
   grep -q "^$name=..*" "$secrets" || fail "$name is not set in $secrets"
 done
 [ -s "$app_key" ] || fail "missing $app_key (run scripts/set-nas-secrets.ps1 from the workstation)"

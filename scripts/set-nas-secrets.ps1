@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'WindowsTools.ps1')
 
 # Settings the NAS needs. The installer checks the same list.
-$Required = @('ANTHROPIC_API_KEY', 'CODING_AGENT_GITHUB_APP_ID', 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID', 'CODING_AGENT_API_TOKEN')
+$Required = @('ANTHROPIC_API_KEY', 'CODING_AGENT_GITHUB_APP_ID', 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID', 'CODING_AGENT_INTENT_TOKEN', 'CODING_AGENT_API_TOKEN')
 # A path on this PC. The key file is sent on its own; on the NAS, compose sets this to the container's copy.
 $KeyFileSetting = 'CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE'
 

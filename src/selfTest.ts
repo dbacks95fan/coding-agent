@@ -1,5 +1,5 @@
 // Copyright (c) 2026 DPSystems, LLC.
-// ABOUTME: Deployment self-test: toolchain present, GitHub App tokens issued, Git remotes reachable, model reachable.
+// ABOUTME: Deployment self-test: toolchain, GitHub App tokens, Git remotes, a read-only intent token, and the model.
 // ABOUTME: Used by the installer before it reports a deployment as working.
 import Anthropic from "@anthropic-ai/sdk";
 import { join } from "node:path";
@@ -49,8 +49,9 @@ function recorder(results: SelfTestResult[], secrets: string[]): Recorder {
 }
 
 /**
- * Asks for every token a run can need: write for each target repository, read for
- * every repository. Local remotes need none and are skipped.
+ * Asks the GitHub App for every token a run can need on a target repository: write
+ * to push, read for everything else. Local remotes need none and are skipped.
+ * Intent repositories use their own read-only token; see intentReadOnlyCheck.
  */
 export async function githubAccessChecks(
   manifest: CheckManifest,
@@ -59,11 +60,10 @@ export async function githubAccessChecks(
 ): Promise<SelfTestResult[]> {
   const results: SelfTestResult[] = [];
   const record = recorder(results, secrets);
-  const wanted: [string, GitAccess][] = [
-    ...manifest.repositories.map((r): [string, GitAccess] => [r.url, "write"]),
-    ...manifest.repositories.map((r): [string, GitAccess] => [r.url, "read"]),
-    ...manifest.intent_repositories.map((url): [string, GitAccess] => [url, "read"]),
-  ];
+  const wanted: [string, GitAccess][] = manifest.repositories.flatMap((r): [string, GitAccess][] => [
+    [r.url, "write"],
+    [r.url, "read"],
+  ]);
   for (const [url, access] of wanted) {
     if (!githubRepository(url)) continue;
     await record(`github app ${access} token: ${url}`, async () => {
@@ -73,6 +73,40 @@ export async function githubAccessChecks(
     });
   }
   return results;
+}
+
+/**
+ * Judges a dry-run push made with the intent token. GitHub checks push permission
+ * before a dry run ends, so acceptance means the token can write.
+ */
+export function judgeReadOnlyProbe(pushError: unknown): string {
+  if (pushError === undefined) {
+    throw new Error("A dry-run push with the intent token was accepted, so it can write; use a read-only token.");
+  }
+  const message = pushError instanceof Error ? pushError.message : String(pushError);
+  if (/denied|not granted|\b403\b/i.test(message)) return "GitHub refused a dry-run push with the intent token.";
+  throw new Error(`The read-only probe could not reach GitHub: ${message}`);
+}
+
+/** Proves the intent token cannot write, by a dry-run push that GitHub must refuse. */
+async function intentReadOnlyCheck(git: DriverGit, url: string, scratch: string, probeDir: string): Promise<string> {
+  const tip = (await git.run(["ls-remote", url, "HEAD"], scratch, { url, access: "read" })).split("\t")[0];
+  await git.fetchCommit(url, tip, probeDir);
+  let pushError: unknown;
+  try {
+    // A dry run: GitHub checks permission, and nothing is written even if it allows it.
+    await git.run(
+      ["push", "--dry-run", "--porcelain", url, `${tip}:refs/heads/coding-agent-read-only-probe`],
+      probeDir,
+      {
+        url,
+        access: "read",
+      },
+    );
+  } catch (err) {
+    pushError = err;
+  }
+  return judgeReadOnlyProbe(pushError);
 }
 
 export async function runSelfTest(
@@ -110,6 +144,13 @@ export async function runSelfTest(
       const out = await git.run(["ls-remote", "--heads", url], scratch, { url, access: "read" });
       return `${out.split("\n").filter(Boolean).length} branch(es) visible.`;
     });
+  }
+
+  for (const [index, url] of manifest.intent_repositories.entries()) {
+    if (!githubRepository(url)) continue;
+    await record(`intent repository is read-only: ${url}`, () =>
+      intentReadOnlyCheck(git, url, scratch, join(scratch, `intent-probe-${index}`)),
+    );
   }
 
   await record(`model: ${config.model}`, probe);

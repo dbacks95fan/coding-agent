@@ -32,6 +32,8 @@ export interface RuntimeConfig {
   limits: AgentLimits;
   /** Absent when no remote needs credentials, as with local test repositories. */
   githubApp?: GitHubAppSettings;
+  /** Read-only token for the intent repositories, which the GitHub App is not installed on. */
+  intentToken?: string;
   gitIdentity: { name: string; email: string };
   apiToken?: string;
   manifestPath: string;
@@ -133,6 +135,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       maxToolOutputChars: number(env, "CODING_AGENT_MAX_TOOL_OUTPUT_CHARS", 30_000),
     },
     githubApp: githubAppSettings(env),
+    intentToken: env.CODING_AGENT_INTENT_TOKEN || undefined,
     gitIdentity: {
       name: env.CODING_AGENT_GIT_NAME ?? "coding-agent",
       email: env.CODING_AGENT_GIT_EMAIL ?? "coding-agent@users.noreply.github.com",
@@ -148,5 +151,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
 
 /** Values that must be scrubbed from any text this process emits. */
 export function secretValues(config: RuntimeConfig): string[] {
-  return [config.anthropicApiKey, config.githubApp?.privateKey, config.apiToken].filter((v): v is string => Boolean(v));
+  return [config.anthropicApiKey, config.githubApp?.privateKey, config.intentToken, config.apiToken].filter(
+    (v): v is string => Boolean(v),
+  );
 }
