@@ -211,7 +211,18 @@ Describe 'deployment files agree' {
         $compose | Should -Match 'CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE: /config/github-app.pem'
         $compose | Should -Match '/secrets/github-app.pem:/config/github-app.pem:ro'
         $install | Should -Match '-v "\$data_dir/secrets:/out"'
-        $install | Should -Match 'chown 10001:999 /out/github-app.pem && chmod 400'
+        $install | Should -Match 'chown 0:0 /out/github-app.pem && chmod 400'
+    }
+
+    It 'starts as root with only SETUID and SETGID, keeping the rest of the hardening' {
+        $compose = Get-Content -LiteralPath (Join-Path $repo 'compose.yaml') -Raw
+        $compose | Should -Match 'user: "0:0"'
+        $compose | Should -Match 'read_only: true'
+        $compose | Should -Match 'no-new-privileges:true'
+        $compose | Should -Match "cap_drop:\s*\r?\n\s*- ALL"
+        $added = [regex]::Match($compose, "cap_add:\s*\r?\n((?:\s*- \w+\s*\r?\n)+)").Groups[1].Value -split '\s*- ' |
+            ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        @($added | Sort-Object) | Should -Be @('SETGID', 'SETUID')
     }
 
     It 'uploads the key to the path the installer reads' {
