@@ -151,12 +151,13 @@ Describe 'set-nas-secrets' {
         }
     }
 
-    It 'finds .runtime.env at the repository root by default' {
-        # Every outcome depends on this PC's .runtime.env. A complete one gets as far as ssh, which
+    It 'finds runtime.env in the workspace .config folder by default' {
+        # Every outcome depends on this PC's settings file. A complete one gets as far as ssh, which
         # fails on the reserved invalid.example host before anything is sent.
         $result = Invoke-SecretsScript -Arguments @('-NasHost', 'invalid.example')
         $result.Output | Should -Not -Match 'Cannot bind argument'
-        $result.Output | Should -Match '(\.runtime\.env does not exist|PROBLEM|Saved|on the NAS failed)'
+        $result.Output | Should -Match ([regex]::Escape((Join-Path (Split-Path -Parent $repo) '.config\coding-agent\runtime.env')))
+        $result.Output | Should -Match '(does not exist|PROBLEM|Saved|on the NAS failed)'
     }
 
     It 'reads NAME=value lines, skipping comments and a byte order mark' {
