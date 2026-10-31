@@ -10,6 +10,7 @@ import type { GitCredentials } from "./git.js";
 import { GitHubAppCredentials } from "./githubApp.js";
 import { createLogger } from "./log.js";
 import { loadManifest, type CheckManifest } from "./manifest.js";
+import { currentProcessIdentity, dropPrivileges } from "./privileges.js";
 import { redact } from "./redact.js";
 import { executeInvocation } from "./run.js";
 import { anthropicProbe, runSelfTest } from "./selfTest.js";
@@ -50,9 +51,14 @@ async function selfTest(config: RuntimeConfig, credentialsFor: CredentialsFor) {
 
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
+  // Secrets are read first, while root can still open the root-only key file; nothing else runs as root.
   const config = loadConfig();
+  const identity = currentProcessIdentity();
+  const privileges = identity ? dropPrivileges(identity) : "not-root";
+  if (privileges === "dropped") process.env.HOME = "/home/agent";
   const secrets = secretValues(config);
   const log = createLogger(secrets);
+  if (privileges === "dropped") log("privileges_dropped", { uid: process.getuid?.() });
   // One app instance per process, so runs and self-tests reuse tokens until they near expiry.
   const appCredentials = config.githubApp ? new GitHubAppCredentials(config.githubApp) : undefined;
   const credentialsFor: CredentialsFor = (manifest) =>

@@ -40,11 +40,12 @@ mkdir -p "$app_dir" "$data_dir/work" "$data_dir/cache" "$data_dir/secrets"
 # Only work/ and cache/: the upload folder beside them stays DockerDeploy's so it can be cleaned up.
 sudo "$docker" run --rm --user root --entrypoint chown \
   -v "$data_dir/work:/data/work" -v "$data_dir/cache:/data/cache" "$image" -R 10001:999 /data/work /data/cache
-# The uploaded key is readable only by DockerDeploy; the service reads a copy readable only by uid 10001.
+# The uploaded key is readable only by DockerDeploy; the service reads a copy readable only by root, which
+# it opens before dropping to uid 10001, so job commands (also uid 10001) cannot read it.
 # This NAS allows DockerDeploy passwordless sudo for docker alone, so a root container makes the copy.
 sudo "$docker" run --rm --user root --entrypoint sh \
   -v "$app_key:/in/github-app.pem:ro" -v "$data_dir/secrets:/out" "$image" \
-  -c 'cp /in/github-app.pem /out/github-app.pem && chown 10001:999 /out/github-app.pem && chmod 400 /out/github-app.pem'
+  -c 'cp /in/github-app.pem /out/github-app.pem && chown 0:0 /out/github-app.pem && chmod 400 /out/github-app.pem'
 cp compose.yaml "$app_dir/docker-compose.yml"
 cp manifest.json "$app_dir/manifest.json"
 printf 'CODING_AGENT_IMAGE=%s\nCODING_AGENT_DATA=%s\n' "$image" "$data_dir" >"$app_dir/.env"

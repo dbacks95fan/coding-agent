@@ -73,7 +73,7 @@ The driver uses two credentials, chosen per remote, so GitHub itself enforces th
 
 ## Deploying on the NAS
 
-The container never runs the Claude Code CLI, which cannot run on the NAS's 3.10 kernel; it calls the Messages API with an API key. It runs as uid 10001 with a read-only root, no capabilities, host networking on port 8081 (bridge NAT drops outbound traffic on this NAS, and the Evaluator owns 8080), and data under `/volume2/docker/coding-agent-data`.
+The container never runs the Claude Code CLI, which cannot run on the NAS's 3.10 kernel; it calls the Messages API with an API key. It starts as root with only SETUID and SETGID, loads its secrets, and switches to uid 10001 before any job runs (see [docs/SECURITY.md](docs/SECURITY.md)); it has a read-only root, `no-new-privileges`, host networking on port 8081 (bridge NAT drops outbound traffic on this NAS, and the Evaluator owns 8080), and data under `/volume2/docker/coding-agent-data`.
 
 1. Copy `.env.example` to `C:\Repos\.config\coding-agent\runtime.env`, outside any repository, and fill in `ANTHROPIC_API_KEY`, the GitHub App's ID, installation ID, and the path to its `.pem` private key on this PC, the read-only `CODING_AGENT_INTENT_TOKEN`, and a random `CODING_AGENT_API_TOKEN` of at least 32 characters.
 2. `scripts/set-nas-secrets.ps1` checks that file and the key, then writes the key to `/volume2/docker/coding-agent/github-app.pem` and the settings to `/volume2/docker/coding-agent/.runtime.env` (both mode 600) over SSH stdin. Values are never printed or put on a command line.
