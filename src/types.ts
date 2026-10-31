@@ -1,102 +1,134 @@
-export type ValidationGate = "build" | "automated_tests" | "playwright" | "docker_build";
+// Copyright (c) 2026 DPSystems, LLC.
+// ABOUTME: TypeScript shapes for the canonical lifecycle records this worker consumes and produces.
+// ABOUTME: The JSON Schema in schemas/lifecycle-contracts.schema.json is authoritative; these mirror it.
+
+export interface WorkItem {
+  product_id: string;
+  intent_id: string;
+  intent_version: number;
+  trello_card_id: string;
+}
+
+export interface CommitRef {
+  repository: string;
+  commit_sha: string;
+}
+
+export interface ArtifactRef extends CommitRef {
+  path: string;
+  sha256: string;
+}
+
+export interface FreezeActivationEvent {
+  schema_version: "1.0";
+  event_id: string;
+  event_type: "activated";
+  work_item: WorkItem;
+  intent: ArtifactRef;
+  policy_profile_id: string;
+  policy_profile_version: string;
+  policy_profile: ArtifactRef;
+  authorized_by: string;
+  recorded_at: string;
+}
+
+export interface StageInvocation {
+  schema_version: "1.1";
+  invocation_id: string;
+  trigger_event_id: string;
+  stage: "spec_design" | "execution" | "evaluation";
+  work_item: WorkItem;
+  freeze_activation: FreezeActivationEvent;
+  input_artifacts: ArtifactRef[];
+  target: CommitRef;
+  workspace_ref: string;
+  read_paths: string[];
+  write_paths: string[];
+}
+
+export interface RequiredValidation {
+  name: string;
+  command: string;
+}
+
+export interface PolicyControl {
+  control_id: string;
+  required_action: string;
+  evidence_expected: string;
+}
 
 export interface WorkContract {
-  schema_version: 2;
-  work_item: string;
-  objective: string;
-  acceptance_criteria: Record<string, string>;
-  constraints?: string[];
-  architectural_constraints?: string[];
-  known_dependencies?: string[];
-  non_goals?: string[];
-  required_validation: ValidationGate[];
-  escalation_conditions?: string[];
-  intent: {
-    path: string;
-    revision: string;
-    sha256: string;
-    reviewUrl: string;
-    status: "Accepted";
-    acceptedBy: string;
-    acceptedAt: string;
-  };
-  board: {
-    provider: "trello" | "jira" | "azure_devops" | "other";
-    workItemId: string;
-    workItemUrl: string;
-    workItemType: "User Story" | "Feature" | "Epic" | "Technical Enabler";
-    parentWorkItemId?: string;
-    parentWorkItemUrl?: string;
-  };
+  schema_version: 3;
+  work_item: WorkItem;
+  intent: ArtifactRef;
+  policy_profile_id: string;
+  policy_profile_version: string;
+  policy_profile: ArtifactRef;
+  target: CommitRef;
+  acceptance_criteria: string[];
+  permitted_scope: { included: string[]; excluded: string[] };
+  required_validation: RequiredValidation[];
+  policy_controls: PolicyControl[];
+  release_requirements: string[];
+  observation_requirements: string[];
 }
 
-export type AgentStatus = "candidate_complete" | "blocked" | "needs_decision" | "failed";
-
-export interface AcceptanceCriterionResult {
-  status: "satisfied" | "not_satisfied" | "partial";
-  evidence: string[];
-}
-
-export interface EscalationEntry {
-  issue: string;
-  evidence?: string[];
-  options?: { option: string; impact: string }[];
-  recommendation?: string;
-  decisionRequired: boolean;
-}
-
-/** The agent's own structured final output (forced via outputFormat json_schema). */
-export interface AgentReport {
-  workItem: string;
-  status: AgentStatus;
+export interface EvaluationFinding {
+  category: "implementation" | "specification" | "policy" | "evidence";
+  severity: "blocking" | "non_blocking";
   summary: string;
-  acceptanceCriteria?: Record<string, AcceptanceCriterionResult>;
-  selfReportedValidation?: Record<string, { status: "pass" | "fail" | "not_run"; passed?: number; failed?: number }>;
-  filesChanged?: string[];
-  assumptions?: string[];
-  risks?: string[];
-  escalations?: EscalationEntry[];
-  /** Self-reported gaps between what was intended/claimed and what was actually
-   *  achieved (e.g. "AC4 is only partially covered because..."). Distinct from
-   *  the driver's own discrepancies, which compare this report against
-   *  independently observed reality (git diff, re-run validation). Both end up
-   *  in the final Evidence Package's discrepancies list. */
-  discrepancies?: string[];
+  artifact?: ArtifactRef;
 }
 
-export interface IndependentValidationResult {
-  status: "pass" | "fail" | "not_run" | "error";
-  command: string;
-  exitCode: number | null;
-  durationMs: number;
-  passed?: number;
-  failed?: number;
-  logExcerpt?: string;
+export interface EvaluationPackage {
+  schema_version: "1.0";
+  work_item: WorkItem;
+  input_artifacts: ArtifactRef[];
+  candidate: CommitRef;
+  checks: ValidationResult[];
+  findings: EvaluationFinding[];
+  status: "pass" | "fail" | "needs_decision" | "blocked" | "failed";
+  summary?: string;
 }
 
-/** The final artifact written to disk / printed to stdout. Authoritative. */
+export interface ValidationResult {
+  name: string;
+  outcome: "passed" | "failed" | "not_run" | "not_applicable";
+  observed_at: string;
+  summary: string;
+  evidence?: ArtifactRef;
+}
+
+export type ExecutionStatus = "candidate_complete" | "needs_decision" | "blocked" | "failed";
+
+export interface PolicyControlEvidence {
+  control_id: string;
+  outcome: "addressed" | "not_applicable" | "needs_decision";
+  summary: string;
+  evidence?: ArtifactRef;
+}
+
 export interface EvidencePackage {
-  workItem: string;
-  status: AgentStatus;
-  summary: string;
-  contractHash: string;
-  runId: string;
-  acceptanceCriteria: Record<string, AcceptanceCriterionResult>;
-  validation: Record<string, IndependentValidationResult>;
-  filesChanged: string[];
-  assumptions: string[];
-  risks: string[];
-  escalations: EscalationEntry[];
-  discrepancies: string[];
-  execution: {
-    numTurns: number | null;
-    totalCostUsd: number | null;
-    durationMs: number;
-    limitHit: "max_turns" | "max_budget_usd" | "max_runtime" | null;
-  };
-  worktree: {
-    path: string;
-    branch: string;
-    baseBranch: string;
-  };
+  schema_version: "1.0";
+  work_item: WorkItem;
+  input_artifacts: ArtifactRef[];
+  candidate: CommitRef;
+  changed_paths: string[];
+  validation: ValidationResult[];
+  policy_control_evidence: PolicyControlEvidence[];
+  status: ExecutionStatus;
+  summary?: string;
+}
+
+export interface StageResult {
+  schema_version: "1.0";
+  invocation_id: string;
+  /** Echoes the invocation's stage; this worker only ever completes "execution". */
+  stage: StageInvocation["stage"];
+  work_item: WorkItem;
+  status: ExecutionStatus;
+  output_artifacts: ArtifactRef[];
+  candidate?: CommitRef;
+  summary?: string;
+  findings?: string[];
 }

@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:lifecycle-contracts:1.2.0",
+  "title": "Agentic SDLC lifecycle contracts",
+  "description": "Shared machine-readable records for workflow handoffs. YAML documents MUST be parsed to JSON data before validation against these schemas.",
+  "$defs": {
+    "ProductConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "product_id", "product_name", "trello_board_id", "trello_lists", "target_repository", "authorized_product_owner_ids", "policy_profiles"],
+      "properties": {
+        "schema_version": { "const": "1.1" },
+        "product_id": { "type": "string", "minLength": 1 },
+        "product_name": { "type": "string", "minLength": 1 },
+        "trello_board_id": { "type": "string", "minLength": 1 },
+        "trello_lists": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["new_ideas", "backlog", "prioritized", "spec_design", "execution", "evaluation", "human_approval", "release", "production_observation", "done"],
+          "properties": {
+            "new_ideas": { "type": "string", "minLength": 1 },
+            "backlog": { "type": "string", "minLength": 1 },
+            "prioritized": { "type": "string", "minLength": 1 },
+            "spec_design": { "type": "string", "minLength": 1 },
+            "execution": { "type": "string", "minLength": 1 },
+            "evaluation": { "type": "string", "minLength": 1 },
+            "human_approval": { "type": "string", "minLength": 1 },
+            "release": { "type": "string", "minLength": 1 },
+            "production_observation": { "type": "string", "minLength": 1 },
+            "done": { "type": "string", "minLength": 1 }
+          },
+          "description": "Explicit mapping from each canonical workflow stage to one Trello list ID on trello_board_id. Consumers must verify uniqueness and board membership against Trello."
+        },
+        "target_repository": { "type": "string", "format": "uri" },
+        "authorized_product_owner_ids": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "policy_profiles": { "type": "object", "minProperties": 1, "propertyNames": { "minLength": 1 }, "additionalProperties": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "CommitRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit_sha"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }
+      }
+    },
+    "ArtifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit_sha", "path", "sha256"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "WorkItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "intent_id", "intent_version", "trello_card_id"],
+      "properties": {
+        "product_id": { "type": "string", "minLength": 1 },
+        "intent_id": { "type": "string", "minLength": 1 },
+        "intent_version": { "type": "integer", "minimum": 1, "description": "Positive integer; starts at 1 and increments by one for each accepted intent revision." },
+        "trello_card_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Stage": {
+      "type": "string",
+      "enum": ["spec_design", "execution", "evaluation"]
+    },
+    "BoardTransitionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event_id", "event_type", "board_id", "card_id", "from_list_id", "to_list_id", "actor_id", "occurred_at"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "event_id": { "type": "string", "minLength": 1 },
+        "event_type": { "const": "card_moved" },
+        "board_id": { "type": "string", "minLength": 1 },
+        "card_id": { "type": "string", "minLength": 1 },
+        "from_list_id": { "type": "string", "minLength": 1 },
+        "to_list_id": { "type": "string", "minLength": 1 },
+        "actor_id": { "type": "string", "minLength": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StageStatus": {
+      "type": "string",
+      "enum": [
+        "spec_ready",
+        "candidate_complete",
+        "pass",
+        "fail",
+        "needs_decision",
+        "blocked",
+        "failed"
+      ]
+    },
+    "StageInvocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "invocation_id", "trigger_event_id", "stage", "work_item", "freeze_activation", "input_artifacts", "target", "workspace_ref", "read_paths", "write_paths"],
+      "properties": {
+        "schema_version": { "const": "1.1" },
+        "invocation_id": { "type": "string", "minLength": 1 },
+        "trigger_event_id": { "type": "string", "minLength": 1 },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "freeze_activation": { "$ref": "#/$defs/FreezeActivationEvent", "description": "The Prioritized freeze record authorizing this engineering invocation. Its typed intent and policy_profile references identify the frozen inputs and include profile ID and version." },
+        "input_artifacts": {
+          "type": "array",
+          "description": "Additional stage-specific immutable inputs beyond the frozen intent and policy profile referenced by freeze_activation.",
+          "items": { "$ref": "#/$defs/ArtifactRef" }
+        },
+        "target": { "$ref": "#/$defs/CommitRef" },
+        "workspace_ref": { "type": "string", "minLength": 1, "description": "Opaque identifier for the assigned isolated workspace; a component adapter resolves it to its implementation-specific location." },
+        "read_paths": { "type": "array", "description": "Normalized target-repository-relative paths readable by this invocation.", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true },
+        "write_paths": { "type": "array", "description": "Normalized target-repository-relative paths this invocation may modify; path resolution must remain inside the assigned workspace.", "items": { "type": "string", "minLength": 1 }, "minItems": 1, "uniqueItems": true }
+      }
+    },
+    "StageResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "invocation_id", "stage", "work_item", "status", "output_artifacts"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "invocation_id": { "type": "string", "minLength": 1 },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "status": { "$ref": "#/$defs/StageStatus" },
+        "output_artifacts": { "type": "array", "items": { "$ref": "#/$defs/ArtifactRef" } },
+        "candidate": { "$ref": "#/$defs/CommitRef" },
+        "summary": { "type": "string", "minLength": 1 },
+        "findings": { "type": "array", "items": { "type": "string" } }
+      },
+      "allOf": [
+        { "if": { "required": ["stage"], "properties": { "stage": { "const": "spec_design" } } }, "then": { "properties": { "status": { "enum": ["spec_ready", "needs_decision", "blocked", "failed"] } } } },
+        { "if": { "required": ["stage"], "properties": { "stage": { "const": "execution" } } }, "then": { "properties": { "status": { "enum": ["candidate_complete", "needs_decision", "blocked", "failed"] } } } },
+        { "if": { "required": ["stage"], "properties": { "stage": { "const": "evaluation" } } }, "then": { "properties": { "status": { "enum": ["pass", "fail", "needs_decision", "blocked", "failed"] } } } },
+        { "if": { "required": ["stage", "status"], "properties": { "stage": { "const": "spec_design" }, "status": { "const": "spec_ready" } } }, "then": { "properties": { "output_artifacts": { "minItems": 2 } } } },
+        { "if": { "required": ["stage", "status"], "properties": { "stage": { "const": "execution" }, "status": { "const": "candidate_complete" } } }, "then": { "required": ["candidate"], "properties": { "output_artifacts": { "minItems": 1 } } } },
+        { "if": { "required": ["stage", "status"], "properties": { "stage": { "const": "evaluation" }, "status": { "enum": ["pass", "fail"] } } }, "then": { "required": ["candidate"], "properties": { "output_artifacts": { "minItems": 1 } } } },
+        {
+          "if": { "properties": { "status": { "enum": ["needs_decision", "blocked", "failed", "fail"] } } },
+          "then": { "required": ["summary"] }
+        }
+      ]
+    },
+    "StageResultDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "invocation_id", "stage", "work_item", "result", "disposition", "recorded_at"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "invocation_id": { "type": "string", "minLength": 1 },
+        "stage": { "$ref": "#/$defs/Stage" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "result": { "$ref": "#/$defs/ArtifactRef" },
+        "disposition": { "enum": ["accepted", "rejected"] },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["disposition"], "properties": { "disposition": { "const": "rejected" } } },
+          "then": { "required": ["reason"] }
+        }
+      ]
+    },
+    "FreezeActivationEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event_id", "event_type", "work_item", "intent", "policy_profile_id", "policy_profile_version", "policy_profile", "authorized_by", "recorded_at"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "event_id": { "type": "string", "minLength": 1 },
+        "event_type": { "const": "activated" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "intent": { "$ref": "#/$defs/ArtifactRef" },
+        "policy_profile_id": { "type": "string", "minLength": 1 },
+        "policy_profile_version": { "type": "string", "minLength": 1 },
+        "policy_profile": { "$ref": "#/$defs/ArtifactRef" },
+        "authorized_by": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "FreezeRevocationEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event_id", "event_type", "work_item", "revokes_event_id", "authorized_by", "recorded_at", "reason"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "event_id": { "type": "string", "minLength": 1 },
+        "event_type": { "const": "revoked" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "revokes_event_id": { "type": "string", "minLength": 1 },
+        "authorized_by": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "WorkContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "intent", "policy_profile_id", "policy_profile_version", "policy_profile", "target", "acceptance_criteria", "permitted_scope", "required_validation", "policy_controls", "release_requirements", "observation_requirements"],
+      "properties": {
+        "schema_version": { "const": 3 },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "intent": { "$ref": "#/$defs/ArtifactRef" },
+        "policy_profile_id": { "type": "string", "minLength": 1 },
+        "policy_profile_version": { "type": "string", "minLength": 1 },
+        "policy_profile": { "$ref": "#/$defs/ArtifactRef" },
+        "target": { "$ref": "#/$defs/CommitRef" },
+        "acceptance_criteria": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "permitted_scope": {
+          "type": "object",
+          "description": "Human-readable included/excluded product behavior. Filesystem permission is independently limited by StageInvocation.write_paths.",
+          "additionalProperties": false,
+          "required": ["included", "excluded"],
+          "properties": {
+            "included": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            "excluded": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "required_validation": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "command"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "command": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "policy_controls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["control_id", "required_action", "evidence_expected"],
+            "properties": {
+              "control_id": { "type": "string", "minLength": 1 },
+              "required_action": { "type": "string", "minLength": 1 },
+              "evidence_expected": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "release_requirements": { "type": "array", "items": { "type": "string" } },
+        "observation_requirements": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "SpecAcceptanceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "decision", "authorized_by", "recorded_at", "spec", "work_contract"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "decision": { "const": "accepted_for_execution" },
+        "authorized_by": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "spec": { "$ref": "#/$defs/ArtifactRef" },
+        "work_contract": { "$ref": "#/$defs/ArtifactRef" }
+      }
+    },
+    "ValidationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "outcome", "observed_at", "summary"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "outcome": { "type": "string", "enum": ["passed", "failed", "not_run", "not_applicable"] },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/ArtifactRef" }
+      }
+    },
+    "EvidencePackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "input_artifacts", "candidate", "changed_paths", "validation", "policy_control_evidence", "status"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "input_artifacts": { "type": "array", "items": { "$ref": "#/$defs/ArtifactRef" }, "minItems": 1 },
+        "candidate": { "$ref": "#/$defs/CommitRef" },
+        "changed_paths": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "validation": { "type": "array", "items": { "$ref": "#/$defs/ValidationResult" } },
+        "policy_control_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["control_id", "outcome", "summary"],
+            "properties": {
+              "control_id": { "type": "string", "minLength": 1 },
+              "outcome": { "type": "string", "enum": ["addressed", "not_applicable", "needs_decision"] },
+              "summary": { "type": "string", "minLength": 1 },
+              "evidence": { "$ref": "#/$defs/ArtifactRef" }
+            }
+          }
+        },
+        "status": { "enum": ["candidate_complete", "needs_decision", "blocked", "failed"] },
+        "summary": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["status"], "properties": { "status": { "const": "candidate_complete" } } },
+          "then": {
+            "properties": {
+              "validation": {
+                "minItems": 1,
+                "items": { "properties": { "outcome": { "enum": ["passed", "not_applicable"] } } }
+              },
+              "policy_control_evidence": {
+                "items": { "properties": { "outcome": { "enum": ["addressed", "not_applicable"] } } }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "EvaluationPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "input_artifacts", "candidate", "checks", "findings", "status"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "input_artifacts": { "type": "array", "items": { "$ref": "#/$defs/ArtifactRef" }, "minItems": 1 },
+        "candidate": { "$ref": "#/$defs/CommitRef" },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/ValidationResult" } },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["category", "severity", "summary"],
+            "properties": {
+              "category": { "type": "string", "enum": ["implementation", "specification", "policy", "evidence"] },
+              "severity": { "type": "string", "enum": ["blocking", "non_blocking"] },
+              "summary": { "type": "string", "minLength": 1 },
+              "artifact": { "$ref": "#/$defs/ArtifactRef" }
+            }
+          }
+        },
+        "status": { "enum": ["pass", "fail", "needs_decision", "blocked", "failed"] },
+        "summary": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["status"], "properties": { "status": { "const": "pass" } } },
+          "then": {
+            "properties": {
+              "checks": {
+                "minItems": 1,
+                "items": { "properties": { "outcome": { "enum": ["passed", "not_applicable"] } } }
+              },
+              "findings": {
+                "items": { "properties": { "severity": { "const": "non_blocking" } } }
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["status"], "properties": { "status": { "const": "fail" } } },
+          "then": {
+            "properties": {
+              "findings": {
+                "contains": {
+                  "required": ["severity"],
+                  "properties": { "severity": { "const": "blocking" } }
+                },
+                "minContains": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "HumanApprovalRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "candidate", "evidence", "evaluation", "decision", "authorized_by", "recorded_at", "rationale"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "candidate": { "$ref": "#/$defs/CommitRef" },
+        "evidence": { "$ref": "#/$defs/ArtifactRef" },
+        "evaluation": { "$ref": "#/$defs/ArtifactRef" },
+        "decision": { "enum": ["approved_for_integration_and_release", "return_to_execution", "return_to_spec_and_design", "stopped"] },
+        "authorized_by": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ReleaseRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "candidate", "approval_record", "environment", "recorded_at", "actions", "verification", "status", "summary"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "candidate": { "$ref": "#/$defs/CommitRef" },
+        "integration": { "$ref": "#/$defs/CommitRef" },
+        "approval_record": { "$ref": "#/$defs/ArtifactRef" },
+        "environment": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "actions": { "type": "array", "items": { "type": "string" } },
+        "verification": { "type": "array", "items": { "$ref": "#/$defs/ValidationResult" } },
+        "rollback": { "type": "string" },
+        "status": { "enum": ["released", "rolled_back", "blocked", "failed"] },
+        "summary": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["status"], "properties": { "status": { "enum": ["released", "rolled_back"] } } },
+          "then": { "required": ["integration"] }
+        },
+        {
+          "if": { "required": ["status"], "properties": { "status": { "const": "rolled_back" } } },
+          "then": { "required": ["rollback"] }
+        }
+      ]
+    },
+    "ObservationRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "release_record", "observation_start", "observation_end", "signals", "expected_outcome", "observed_outcome", "recommendation"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "release_record": { "$ref": "#/$defs/ArtifactRef" },
+        "observation_start": { "type": "string", "format": "date-time" },
+        "observation_end": { "type": "string", "format": "date-time" },
+        "signals": { "type": "array", "items": { "type": "string" } },
+        "expected_outcome": { "type": "string", "minLength": 1 },
+        "observed_outcome": { "type": "string", "minLength": 1 },
+        "incidents_or_deviations": { "type": "array", "items": { "type": "string" } },
+        "follow_up_refs": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "recommendation": { "enum": ["close", "create_follow_up"] }
+      }
+    },
+    "ClosureRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "outcome", "latest_artifact", "authorized_by", "recorded_at", "reason"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "outcome": { "enum": ["stopped", "rolled_back"] },
+        "latest_artifact": { "$ref": "#/$defs/ArtifactRef" },
+        "authorized_by": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string", "minLength": 1 },
+        "follow_up_refs": { "type": "array", "items": { "type": "string", "format": "uri" } }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/ProductConfig" },
+    { "$ref": "#/$defs/BoardTransitionEvent" },
+    { "$ref": "#/$defs/StageInvocation" },
+    { "$ref": "#/$defs/StageResult" },
+    { "$ref": "#/$defs/StageResultDecision" },
+    { "$ref": "#/$defs/FreezeActivationEvent" },
+    { "$ref": "#/$defs/FreezeRevocationEvent" },
+    { "$ref": "#/$defs/WorkContract" },
+    { "$ref": "#/$defs/SpecAcceptanceRecord" },
+    { "$ref": "#/$defs/EvidencePackage" },
+    { "$ref": "#/$defs/EvaluationPackage" },
+    { "$ref": "#/$defs/HumanApprovalRecord" },
+    { "$ref": "#/$defs/ReleaseRecord" },
+    { "$ref": "#/$defs/ObservationRecord" },
+    { "$ref": "#/$defs/ClosureRecord" }
+  ]
+}

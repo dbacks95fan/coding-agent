@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.1",
+  "invocation_id": "inv-1",
+  "trigger_event_id": "evt-1",
+  "stage": "execution",
+  "work_item": {
+    "product_id": "MF",
+    "intent_id": "INT-MF-0042",
+    "intent_version": 1,
+    "trello_card_id": "card-1"
+  },
+  "freeze_activation": {
+    "schema_version": "1.0",
+    "event_id": "freeze-1",
+    "event_type": "activated",
+    "work_item": {
+      "product_id": "MF",
+      "intent_id": "INT-MF-0042",
+      "intent_version": 1,
+      "trello_card_id": "card-1"
+    },
+    "intent": {
+      "repository": "https://github.com/dbacks95fan/intent-backlog.git",
+      "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "products/mealflow/intents/INT-MF-0042/intent.md",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "policy_profile_id": "MEALFLOW-DEFAULT",
+    "policy_profile_version": "1",
+    "policy_profile": {
+      "repository": "https://github.com/dbacks95fan/intent-backlog.git",
+      "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "products/mealflow/policy-profiles/MEALFLOW-DEFAULT.md",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "authorized_by": "owner-1",
+    "recorded_at": "2026-10-27T10:00:00Z"
+  },
+  "input_artifacts": [
+    {
+      "repository": "https://github.com/dbacks95fan/mealflow.git",
+      "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "path": ".agent/work/INT-MF-0042/spec.md",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "repository": "https://github.com/dbacks95fan/mealflow.git",
+      "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "path": ".agent/work/INT-MF-0042/work-contract.yaml",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "target": {
+    "repository": "https://github.com/dbacks95fan/mealflow.git",
+    "commit_sha": "cccccccccccccccccccccccccccccccccccccccc"
+  },
+  "workspace_ref": "work/INT-MF-0042",
+  "read_paths": ["."],
+  "write_paths": ["client", "server", "e2e", ".agent/work/INT-MF-0042/evidence-package"]
+}

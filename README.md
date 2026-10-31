@@ -1,130 +1,90 @@
-# coding-agent (v0.1)
+# coding-agent
 
-The "Coding Agent" step of an experimental Agentic SDLC (Kanban flow, XP quality
-practices, AI execution, human judgment). Given an approved **Work Contract**
-(YAML) and a target git repository, it implements the contract in an isolated
-worktree using the Claude Agent SDK, then **independently re-runs** whatever
-validation the contract requires — it does not trust its own claim that tests
-pass. Output is one structured Evidence Package, never a self-declared "Done".
+The Coding Agent for the [Agentic SDLC](https://github.com/dbacks95fan/agentic-sdlc) Execution stage. It receives a `StageInvocation` 1.1 from the Conductor, fetches the assigned work branch at the exact handoff commit, verifies every frozen and accepted input, implements the accepted `spec.md` and Work Contract v3 with Claude, independently re-runs the contract's required checks, and pushes the candidate commit plus a canonical Evidence Package to the work branch. It returns a correlated `StageResult`.
 
-It does not plan work, does not decide whether a result is approved, and does
-not talk to Trello, GitHub, or anything else — see
-[ARCHITECTURE.md](./ARCHITECTURE.md) for the full design and why each boundary
-exists.
+It never approves, merges, releases, moves Trello cards, or changes the intent, policy profile, spec, or Work Contract. `candidate_complete` means "ready for the independent Evaluator", not "done".
 
-## Operating documentation
+The normative contract is `agentic-sdlc` (Stage Contracts Â§4 Execution, Artifacts, Workflow, Governance, and `schemas/lifecycle-contracts.schema.json`). This repository vendors that schema byte-for-byte; `npm run check:schema-sync` confirms it matches a sibling checkout.
 
-The current implementation and its Work Contract v2 behavior are documented in
-`ARCHITECTURE.md`. The agent’s versioned operating contract and the planned
-alignment with the wider intent → spec → plan lifecycle are documented separately:
+## How a run works
 
-- [Build instructions](docs/BUILD_INSTRUCTIONS.md)
-- [Operating contract](docs/OPERATING_CONTRACT.md)
-- [Artifact contracts](docs/ARTIFACTS.md)
-- [Conductor and Evaluator integration](docs/INTEGRATION.md)
-- [Security and safety requirements](docs/SECURITY.md)
-- [Test strategy](docs/TEST_STRATEGY.md)
-- [Decisions and migration boundaries](docs/DECISIONS.md)
+1. **Admit** the invocation: schema 1.1, stage `execution`, matching work identity, `workspace_ref` equal to `work/<intent-id>`, trusted repositories, recognized inputs, normalized `read_paths`/`write_paths`. Anything wrong returns `blocked` before any network or model call.
+2. **Fetch and verify**: the remote branch tip must equal `target.commit_sha` (the handoff). The accepted `spec.md` and `work-contract.yaml` must hash correctly at their accepted commit and be unchanged at the handoff. The frozen intent and policy-profile copies must match the freeze fingerprints, and their originals are fetched from `intent-backlog` and checked too. The Work Contract must agree with the freeze and target. Every required check must appear, with the identical command, in the trusted manifest.
+3. **Set up** the repository with its manifest setup commands (for example `npm ci`).
+4. **Implement** with Claude through the Messages API: Anthropic's bash and text-editor tools plus a `submit_report` tool, bounded by turns, estimated cost, and wall-clock time.
+5. **Check scope**: the driver folds all changes into one candidate commit on the handoff and rejects any changed path outside `write_paths` or touching a frozen or recorded artifact.
+6. **Validate independently**: each required check runs exactly as the manifest defines it. The agent's own claims never decide the status.
+7. **Publish** (only for `candidate_complete`): commit the Evidence Package after the candidate and push fast-forward only. If the branch moved, nothing is pushed and the result is `blocked`.
 
-Those documents preserve v0.1 behavior while specifying the next compatible
-contract version; they do not claim that its new inputs are implemented today.
+Other outcomes (`needs_decision`, `blocked`, `failed`) push nothing and explain why in `StageResult.findings`.
 
-**Status**: validated end-to-end against a real story in the
-[MealFlow](https://github.com/dbacks95fan/menuapp) repo — reached
-`candidate_complete` with build, unit, and Playwright gates independently
-passing, then merged after human review.
-
-## Install
+## Commands
 
 ```
-npm install
-npm run build
+npm ci
+npm run check            # typecheck, lint, format check, tests, build
+npm run test:live        # real Claude API run against local repos; costs money, needs ANTHROPIC_API_KEY
+npm run check:schema-sync
+
+node dist/cli.js run --invocation <stage-invocation.json>
+node dist/cli.js serve
+node dist/cli.js self-test
 ```
 
-## Usage
+`run` prints `{stage_result, evidence_package, diagnostics}` and exits `0` candidate_complete, `1` failed, `2` blocked, `3` needs_decision, `4` input could not be correlated, `64` usage error.
 
-```
-npm run run -- run --contract examples/MEAL-EMPTY-STATE.yaml --repo /path/to/menuapp
-```
+## HTTP API (`serve`)
 
-or, after `npm run build`:
+| Method and path | Auth | Purpose |
+| --- | --- | --- |
+| `GET /health` | none | `200 {"status":"ok","busy":bool}` |
+| `POST /invocations` | Bearer | Body is a StageInvocation. `202` starts it; resubmitting the same body is idempotent; different content for the same ID or a second concurrent run returns `409`. |
+| `GET /invocations/{id}` | Bearer | `{"state":"running"}` or `{"state":"done","stage_result":â€¦,"evidence_package":â€¦,"diagnostics":â€¦}` |
+| `POST /self-test` | Bearer | Toolchain, a GitHub App token for every access a run can need, Git access to every manifest repository, proof that the intent token cannot write, and one tiny model request. `200` all pass, `503` otherwise. |
 
-```
-node dist/cli.js run --contract <path> --repo <path> [options]
-```
+See [docs/INTEGRATION.md](docs/INTEGRATION.md) for what the Conductor must send and verify.
 
-Options (all optional):
+## Configuration
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `--base-branch` | `main` | Branch the isolated worktree is created from |
-| `--max-turns` | `40` | SDK conversation-turn cap |
-| `--max-budget-usd` | `2` | SDK API-cost cap |
-| `--max-runtime-min` | `20` | Wall-clock cap |
-| `--discard-worktree` | off | Remove the worktree/branch when done instead of leaving it for inspection |
+Environment variables (see `.env.example`):
 
-Prints one JSON Evidence Package to stdout. Exit code: `0` candidate_complete,
-`2` blocked, `3` needs_decision, `1` failed.
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | required | Claude API key |
+| `CODING_AGENT_GITHUB_APP_ID` / `_INSTALLATION_ID` / `_PRIVATE_KEY_FILE` | none | GitHub App for the driver's Git calls on product repositories. All three or none; none only suits local remotes. See [GitHub access](#github-access). |
+| `CODING_AGENT_INTENT_TOKEN` | none | Read-only fine-grained token for the intent repositories. Required when they are on GitHub. |
+| `CODING_AGENT_API_TOKEN` | required for `serve` | Bearer token the Conductor sends |
+| `CODING_AGENT_MANIFEST` | `/etc/coding-agent/manifest.json` | Trusted repositories, setup, and check commands ([MealFlow](config/manifest.json)) |
+| `CODING_AGENT_MODEL` / `CODING_AGENT_EFFORT` | `claude-opus-5-5` / `high` | Execution-plane model and effort |
+| `CODING_AGENT_SERVER_SIDE_FALLBACK` | `on` | On a policy refusal the API retries the turn on a fallback model; the model that answered is recorded |
+| `CODING_AGENT_MAX_TURNS` / `_MAX_COST_USD` / `_MAX_RUNTIME_MIN` | `60` / `5` / `30` | Run limits; hitting one returns `blocked` |
+| `CODING_AGENT_PRICE_*` | Opus 5.5 list prices | Per-million-token prices used for the cost ceiling |
+| `CODING_AGENT_WORK_ROOT` | OS temp | Per-run scratch space; each run's directory is deleted afterward |
+| `CODING_AGENT_SHELL` | `bash` | Shell for agent commands, setup, and checks |
+| `CODING_AGENT_COMMAND_ENV_<NAME>` | none | Passed to commands as `<NAME>` (for example shared npm and Playwright caches) |
 
-## What it needs in the target repo
+## GitHub access
 
-- Git repository, with the `--base-branch` (default `main`) present.
-- A `CLAUDE.md` or `AGENTS.md` at the repo root (read into the agent's system
-  prompt as repository context — not required, but strongly recommended; without
-  one the agent proceeds from direct inspection alone).
-- The document referenced by the contract's `intent.path` (see below) must
-  actually exist in the repo, unchanged since acceptance.
-- npm scripts matching the gate names it knows how to run independently:
-  `npm run build`, `npm run test:server`, `npm run test:e2e`, plus a root
-  `Dockerfile` for the `docker_build` gate. See `src/validators.ts` — this mapping
-  is intentionally a fixed convention, not something the contract or the agent can
-  redefine.
+The driver uses two credentials, chosen per remote, so GitHub itself enforces that intents are never written:
 
-## Work Contract v2: intent chain of custody
+- **Product repositories: a GitHub App.** The app has **Contents: read and write** and **Metadata: read**, webhooks off, and is installed on product repositories only. For each Git call the driver asks for a one-hour token limited to that call's one repository: **write** only to push to the target repository, **read** otherwise. Tokens are reused until ten minutes before they expire, and a token GitHub returns with any wider scope is refused.
+- **Intent repositories: a read-only fine-grained token** (`CODING_AGENT_INTENT_TOKEN`), because the app is not installed there. The driver refuses any write to an intent repository before Git runs, and the self-test proves the token cannot write with a dry-run push that GitHub must refuse.
+- Credentials stay in the service process. Git sees a token only through a credential helper that reads it from the Git child's environment; agent shell commands never receive them.
 
-Every contract must be `schema_version: 2` and carry `intent` (its own acceptance
-record — path, revision, sha256, reviewUrl, status, acceptedBy, acceptedAt) and
-`board` (tracker linkage — provider, workItemId, workItemUrl, workItemType). See
-`examples/*.yaml` for the shape.
+## Deploying on the NAS
 
-Before touching anything, the tool verifies this chain of custody:
+The container never runs the Claude Code CLI, which cannot run on the NAS's 3.10 kernel; it calls the Messages API with an API key. It runs as uid 10001 with a read-only root, no capabilities, host networking on port 8081 (bridge NAT drops outbound traffic on this NAS, and the Evaluator owns 8080), and data under `/volume2/docker/coding-agent-data`.
 
-- `intent.status === "Accepted"` and `acceptedBy`/`acceptedAt` are present — enforced
-  by schema validation; a contract that fails this is rejected before it's even
-  fully loaded.
-- `intent.sha256` matches the real, current SHA-256 of the file at `intent.path` in
-  the target repo — enforced at runtime (`src/preflight.ts`), since schema
-  validation has no way to check actual repo file content.
+1. Copy `.env.example` to `.runtime.env` (gitignored) and fill in `ANTHROPIC_API_KEY`, the GitHub App's ID, installation ID, and the path to its `.pem` private key on this PC, the read-only `CODING_AGENT_INTENT_TOKEN`, and a random `CODING_AGENT_API_TOKEN` of at least 32 characters.
+2. `scripts/set-nas-secrets.ps1` checks that file and the key, then writes the key to `/volume2/docker/coding-agent/github-app.pem` and the settings to `/volume2/docker/coding-agent/.runtime.env` (both mode 600) over SSH stdin. Values are never printed or put on a command line.
+3. `scripts/deploy-synology.ps1` builds the image from a committed revision on this PC, gzips it with the compose file, installer, and `config/manifest.json`, stages it under `/volume2/docker/coding-agent-data/incoming` (not `/tmp`, which is a RAM disk smaller than the image), and runs `scripts/install-on-nas.sh`.
+4. The installer refuses to change anything if a secret or the key is missing, then loads the image, copies the key to `/volume2/docker/coding-agent-data/secrets` readable only by the container user, starts it with the NAS's `docker-compose` 1.28, and reports success only when `GET /health` returns `200` and `POST /self-test` passes. The self-test makes one tiny paid model request.
 
-Either failure returns `status: "blocked"` immediately — no worktree, no SDK call,
-no cost — with `reasons` explaining exactly what didn't check out. See
-[ARCHITECTURE.md](./ARCHITECTURE.md#v2-intent-chain-of-custody-gate) for the full
-rationale.
+Defaults: host `10.100.10.10`, user `DockerDeploy`, key `~/.ssh/nas_key`. `npm run test:deploy` runs the Pester tests for these scripts.
+## Documentation
 
-## What it will not do, on purpose
-
-- Push, merge, or check out `main`/`master`.
-- Touch Trello, GitHub, or any other MCP-connected service — the sub-session gets
-  zero MCP servers and no ambient settings, regardless of what's configured for
-  whoever runs this tool.
-- SSH/SCP anywhere, or otherwise touch a deployment target.
-- Write to the Work Contract file, or to its own permission settings.
-- Trust its own claim that tests pass — `required_validation` gates are re-run by
-  this tool after the agent's turn ends, against the resulting code, and that
-  result is what's authoritative in the Evidence Package.
-
-## Running today: local process, invoked by `orchestrator`
-
-This runs as a local `node` subprocess on the same machine as `orchestrator`
-(Trello Conductor) — see that project's `src/codingAgent/runCodingAgent.ts`,
-which spawns it exactly per the CLI usage above. There's no container packaging
-or remote deployment right now; an earlier attempt at NAS/Docker deployment was
-reverted (see [ARCHITECTURE.md](./ARCHITECTURE.md) — "No container packaging" —
-for why) and could be revisited later, but isn't part of the currently-running
-setup.
-
-## Auditing a run
-
-Every run writes `.agent/audit/<work_item>-<runId>.jsonl` and
-`.agent/evidence/<work_item>-<runId>.json` **inside the target repo** (not this
-tool's repo) — so the audit trail travels with the code it's about.
+- [ARCHITECTURE.md](ARCHITECTURE.md): design and why each boundary exists
+- [docs/INTEGRATION.md](docs/INTEGRATION.md): the Conductor contract
+- [docs/SECURITY.md](docs/SECURITY.md): controls and known residual risks
+- [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md): what the tests prove
+- [docs/DECISIONS.md](docs/DECISIONS.md): decisions and open questions
