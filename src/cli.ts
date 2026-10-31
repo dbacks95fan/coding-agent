@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copyright (c) 2026 DPSystems, LLC.
-// ABOUTME: Command-line entry: run one invocation from a file, serve the HTTP API, or run the deployment self-test.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+// ABOUTME: Process entry: serve the authenticated HTTP API or run the deployment self-test.
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AnthropicModelClient } from "./agentLoop.js";
 import { loadConfig, secretValues, type RuntimeConfig } from "./config.js";
@@ -17,21 +17,13 @@ import { anthropicProbe, runSelfTest } from "./selfTest.js";
 import { createService } from "./service.js";
 
 const USAGE = `Usage:
-  coding-agent run --invocation <stage-invocation.json>
   coding-agent serve
   coding-agent self-test
 
+Invocations arrive only through the HTTP API started by "serve".
 Configuration comes from environment variables; see README.md.`;
 
-/** Exit codes for "run": one per Execution status, plus 4 when the input cannot be correlated. */
-export const EXIT_CODES = {
-  candidate_complete: 0,
-  failed: 1,
-  blocked: 2,
-  needs_decision: 3,
-  uncorrelated: 4,
-  usage: 64,
-} as const;
+const USAGE_EXIT_CODE = 64;
 
 function requireModelKey(config: RuntimeConfig): void {
   if (!config.anthropicApiKey) throw new Error("ANTHROPIC_API_KEY is not set.");
@@ -50,7 +42,7 @@ async function selfTest(config: RuntimeConfig, credentialsFor: CredentialsFor) {
 }
 
 async function main(argv: string[]): Promise<number> {
-  const [command, ...rest] = argv;
+  const [command] = argv;
   // Secrets are read first, while root can still open the root-only key file; nothing else runs as root.
   const config = loadConfig();
   const identity = currentProcessIdentity();
@@ -64,29 +56,6 @@ async function main(argv: string[]): Promise<number> {
   const credentialsFor: CredentialsFor = (manifest) =>
     new RoutedCredentials(manifest, config.intentToken, appCredentials);
   mkdirSync(config.workRoot, { recursive: true });
-
-  if (command === "run") {
-    const flag = rest.indexOf("--invocation");
-    const file = flag >= 0 ? rest[flag + 1] : undefined;
-    if (!file) {
-      process.stderr.write(`${USAGE}\n`);
-      return EXIT_CODES.usage;
-    }
-    requireModelKey(config);
-    const raw: unknown = JSON.parse(readFileSync(file, "utf8"));
-    const manifest = loadManifest(config.manifestPath);
-    const outcome = await executeInvocation(raw, {
-      config,
-      manifest,
-      model: new AnthropicModelClient(config),
-      log,
-      credentials: credentialsFor(manifest),
-    });
-    process.stdout.write(
-      `${redact(JSON.stringify({ stage_result: outcome.stageResult, evidence_package: outcome.evidencePackage, diagnostics: outcome.diagnostics }, null, 2), secrets)}\n`,
-    );
-    return outcome.stageResult ? EXIT_CODES[outcome.stageResult.status] : EXIT_CODES.uncorrelated;
-  }
 
   if (command === "serve") {
     requireModelKey(config);
@@ -118,7 +87,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   process.stderr.write(`${USAGE}\n`);
-  return EXIT_CODES.usage;
+  return USAGE_EXIT_CODE;
 }
 
 main(process.argv.slice(2)).then(

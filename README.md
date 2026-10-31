@@ -26,12 +26,11 @@ npm run check            # typecheck, lint, format check, tests, build
 npm run test:live        # real Claude API run against local repos; costs money, needs ANTHROPIC_API_KEY
 npm run check:schema-sync
 
-node dist/cli.js run --invocation <stage-invocation.json>
 node dist/cli.js serve
 node dist/cli.js self-test
 ```
 
-`run` prints `{stage_result, evidence_package, diagnostics}` and exits `0` candidate_complete, `1` failed, `2` blocked, `3` needs_decision, `4` input could not be correlated, `64` usage error.
+Invocations arrive only through the HTTP API that `serve` starts; there is no command for running one from a file. Any other command prints usage and exits `64`.
 
 ## HTTP API (`serve`)
 

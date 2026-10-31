@@ -10,6 +10,7 @@
 - **Evidence location.** `.agent/work/<intent-id>/evidence-package/<invocation-id>.json`, committed after the candidate.
 - **Trusted check manifest is operator configuration.** It lives with the deployment, not in the product repository, so no spec or agent change can widen what runs.
 - **Transport.** Authenticated HTTP with submit-then-poll, one run at a time, results held in memory.
+- **HTTP is the only way in.** The command for running one invocation from a file was removed. The agent runs only as the NAS service, using Claude through the API, so a second path would bypass the service's authentication and single-run guard.
 
 ## Open
 

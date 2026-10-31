@@ -33,4 +33,10 @@ Before routing, the Conductor (read-only) should:
 
 ## Not yet done on the Conductor side
 
-The current Conductor still converts Work Contract v3 to the retired v2 format and runs this agent as a local subprocess. It must instead send the StageInvocation above over HTTP and stop writing to the product repository, per the agentic-sdlc rule that agents, not the Conductor, push work branches.
+The Conductor (trello-orchestrator) sends the StageInvocation above over HTTP, polls for the result, and does not write to the product repository. Of the checks under "Verify the result", it validates the StageResult and Evidence Package schemas and the invocation identity, but it does not yet:
+
+- confirm the branch tip, candidate parent, and evidence file hash (step 2);
+- compare Evidence Package validation outcomes to `required_validation`, or policy-control evidence to the frozen profile (step 3);
+- record a `StageResultDecision` (step 4).
+
+It also sends `write_paths: ["."]` rather than product scopes plus the evidence path.
