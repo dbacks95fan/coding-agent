@@ -1,7 +1,7 @@
 {
   "repositories": [
     {
-      "url": "https://github.com/dbacks95fan/menuapp.git",
+      "url": "https://github.com/dbacks95fan/mealflow.git",
       "setup": ["npm ci", "npx playwright install chromium"],
       "checks": {
         "build": "npm run build",

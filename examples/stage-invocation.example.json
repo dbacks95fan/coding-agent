@@ -38,20 +38,20 @@
   },
   "input_artifacts": [
     {
-      "repository": "https://github.com/dbacks95fan/menuapp.git",
+      "repository": "https://github.com/dbacks95fan/mealflow.git",
       "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
       "path": ".agent/work/INT-MF-0042/spec.md",
       "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
     },
     {
-      "repository": "https://github.com/dbacks95fan/menuapp.git",
+      "repository": "https://github.com/dbacks95fan/mealflow.git",
       "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
       "path": ".agent/work/INT-MF-0042/work-contract.yaml",
       "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
     }
   ],
   "target": {
-    "repository": "https://github.com/dbacks95fan/menuapp.git",
+    "repository": "https://github.com/dbacks95fan/mealflow.git",
     "commit_sha": "cccccccccccccccccccccccccccccccccccccccc"
   },
   "workspace_ref": "work/INT-MF-0042",

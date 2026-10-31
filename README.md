@@ -71,7 +71,7 @@ The container never runs the Claude Code CLI, which cannot run on the NAS's 3.10
 3. `scripts/deploy-synology.ps1` builds the image from a committed revision on this PC, gzips it with the compose file, installer, and `config/manifest.json`, stages it under `/volume2/docker/coding-agent-data/incoming` (not `/tmp`, which is a RAM disk smaller than the image), and runs `scripts/install-on-nas.sh`.
 4. The installer refuses to change anything if a secret is missing, then loads the image, starts it with the NAS's `docker-compose` 1.28, and reports success only when `GET /health` returns `200` and `POST /self-test` passes. The self-test makes one tiny paid model request.
 
-Defaults: host `10.100.10.10`, user `DockerDeploy`, key `~/.ssh/menuapp_nas`. `npm run test:deploy` runs the Pester tests for these scripts.
+Defaults: host `10.100.10.10`, user `DockerDeploy`, key `~/.ssh/nas_key`. `npm run test:deploy` runs the Pester tests for these scripts.
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): design and why each boundary exists

@@ -5,7 +5,7 @@
 [CmdletBinding()]
 param(
     [string]$NasHost = '10.100.10.10',
-    [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\menuapp_nas'),
+    [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\nas_key'),
     [string]$Ref = 'HEAD',
     [string]$RemoteUser = 'DockerDeploy',
     # Build the package into this folder and stop, without contacting the NAS.

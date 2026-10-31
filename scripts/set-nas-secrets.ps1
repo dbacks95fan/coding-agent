@@ -5,7 +5,7 @@
 [CmdletBinding()]
 param(
     [string]$NasHost = '10.100.10.10',
-    [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\menuapp_nas'),
+    [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\nas_key'),
     [string]$RemoteUser = 'DockerDeploy',
     [string]$RemoteFile = '/volume2/docker/coding-agent/.runtime.env',
     # Defaults to .runtime.env at the repository root. Resolved in the body: Windows PowerShell 5.1
