@@ -69,7 +69,7 @@ export async function githubAccessChecks(
     await record(`github app ${access} token: ${url}`, async () => {
       if (!credentials) throw new Error("No GitHub App is configured; set the CODING_AGENT_GITHUB_APP_* settings.");
       if (!(await credentials.tokenFor(url, access))) throw new Error("No token was issued.");
-      return `GitHub issued a ${access}-only token for this repository alone.`;
+      return `GitHub issued a token with ${access} access to this repository alone.`;
     });
   }
   return results;
