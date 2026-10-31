@@ -66,7 +66,7 @@ Environment variables (see `.env.example`):
 
 The driver authenticates as a GitHub App, never with a personal token. One fine-grained personal token cannot be read/write on a product repository and read-only on intent-backlog at once; an app can, because each token it mints names its own repositories and permissions.
 
-- The app (`dpsystems-agents-app`) has **Contents: read and write** and **Metadata: read**, webhooks off, and is installed only on the repositories in the manifest.
+- The app (`dpsystems-coding-agent-app`) has **Contents: read and write** and **Metadata: read**, webhooks off, and is installed only on the repositories in the manifest.
 - For each Git call the driver asks for a one-hour token limited to that call's one repository: **write** only to push to the target repository, **read** for everything else. Tokens are reused until ten minutes before they expire. A token GitHub returns with any wider scope is refused.
 - The private key stays in the service process. Git sees only the minted token, through a credential helper that reads it from the Git child's environment; agent shell commands never receive it.
 - Each agent gets its own app, so its commits carry its own identity and one app can be revoked without touching the others.
