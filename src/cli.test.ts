@@ -17,13 +17,15 @@ test("an unknown command prints usage and exits 64", () => {
   assert.match(result.stderr, /Usage:/);
 });
 
-test("run without --invocation prints usage", () => {
-  const result = cli(["run"]);
+test("run is not a command; invocations arrive only over the HTTP API", () => {
+  const result = cli(["run", "--invocation", "invocation.json"], { ANTHROPIC_API_KEY: "sk-ant-placeholder-for-test" });
   assert.equal(result.status, 64);
+  assert.match(result.stderr, /Usage:/);
+  assert.doesNotMatch(result.stderr, /coding-agent run/);
 });
 
-test("run refuses to start without a model key and says why", () => {
-  const result = cli(["run", "--invocation", "missing.json"]);
+test("serve refuses to start without a model key and says why", () => {
+  const result = cli(["serve"]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /ANTHROPIC_API_KEY is not set/);
 });
