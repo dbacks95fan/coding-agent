@@ -1,5 +1,5 @@
 # Copyright (c) 2026 DPSystems, LLC.
-# ABOUTME: Copies this PC's .runtime.env and the GitHub App private key to the NAS after checking them.
+# ABOUTME: Copies this PC's runtime settings and the GitHub App private key to the NAS after checking them.
 # ABOUTME: Values are never shown, logged, or passed on a command line; they travel over the SSH session's stdin.
 
 [CmdletBinding()]
@@ -9,8 +9,9 @@ param(
     [string]$RemoteUser = 'DockerDeploy',
     [string]$RemoteFile = '/volume2/docker/coding-agent/.runtime.env',
     [string]$RemoteKeyFile = '/volume2/docker/coding-agent/github-app.pem',
-    # Defaults to .runtime.env at the repository root. Resolved in the body: Windows PowerShell 5.1
-    # leaves $PSScriptRoot empty while evaluating parameter defaults under -File.
+    # Defaults to .config\coding-agent\runtime.env beside the repository (C:\Repos\.config\...), so
+    # secrets live outside any project folder. Resolved in the body: Windows PowerShell 5.1 leaves
+    # $PSScriptRoot empty while evaluating parameter defaults under -File.
     [string]$LocalFile
 )
 
@@ -95,7 +96,11 @@ function Send-SecretText {
 
 # Dot-sourcing this file (as the tests do) only defines the functions above.
 if ($MyInvocation.InvocationName -ne '.') {
-    if (-not $LocalFile) { $LocalFile = Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime.env' }
+    if (-not $LocalFile) {
+        $workspace = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $LocalFile = Join-Path $workspace '.config\coding-agent\runtime.env'
+    }
+    Write-Output "Settings file: $LocalFile"
     if (-not (Test-Path -LiteralPath $LocalFile)) { throw "$LocalFile does not exist. Copy .env.example to it and fill it in." }
     $values = Read-EnvFile $LocalFile
     $problems = @(Test-RuntimeSetting -Values $values) + @(Test-GitHubAppKey -Values $values) | Where-Object { $_ }
