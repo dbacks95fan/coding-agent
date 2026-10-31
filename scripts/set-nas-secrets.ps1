@@ -1,6 +1,6 @@
 # Copyright (c) 2026 DPSystems, LLC.
-# ABOUTME: Copies this PC's .runtime.env to the NAS after checking it. Values are never shown,
-# ABOUTME: logged, or passed on a command line; they travel over the SSH session's stdin.
+# ABOUTME: Copies this PC's .runtime.env and the GitHub App private key to the NAS after checking them.
+# ABOUTME: Values are never shown, logged, or passed on a command line; they travel over the SSH session's stdin.
 
 [CmdletBinding()]
 param(
@@ -8,6 +8,7 @@ param(
     [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\nas_key'),
     [string]$RemoteUser = 'DockerDeploy',
     [string]$RemoteFile = '/volume2/docker/coding-agent/.runtime.env',
+    [string]$RemoteKeyFile = '/volume2/docker/coding-agent/github-app.pem',
     # Defaults to .runtime.env at the repository root. Resolved in the body: Windows PowerShell 5.1
     # leaves $PSScriptRoot empty while evaluating parameter defaults under -File.
     [string]$LocalFile
@@ -16,7 +17,10 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'WindowsTools.ps1')
 
-$Required = @('ANTHROPIC_API_KEY', 'CODING_AGENT_GIT_TOKEN', 'CODING_AGENT_API_TOKEN')
+# Settings the NAS needs. The installer checks the same list.
+$Required = @('ANTHROPIC_API_KEY', 'CODING_AGENT_GITHUB_APP_ID', 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID', 'CODING_AGENT_API_TOKEN')
+# A path on this PC. The key file is sent on its own; on the NAS, compose sets this to the container's copy.
+$KeyFileSetting = 'CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE'
 
 function Read-EnvFile {
     # NAME=value lines in file order. Comments and blank lines are dropped; .env.example is
@@ -41,10 +45,26 @@ function Test-RuntimeSetting {
     }
     $apiToken = [string]$Values['CODING_AGENT_API_TOKEN']
     if ($apiToken -and $apiToken.Length -lt 32) { $problems += 'CODING_AGENT_API_TOKEN is shorter than 32 characters' }
+    foreach ($name in 'CODING_AGENT_GITHUB_APP_ID', 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID') {
+        $id = [string]$Values[$name]
+        if ($id -and $id -notmatch '^\d+$') { $problems += "$name must be a number" }
+    }
+    if ($Values.Contains('CODING_AGENT_GIT_TOKEN')) { $problems += 'CODING_AGENT_GIT_TOKEN is no longer used; remove it' }
     foreach ($name in $Values.Keys) {
         if (([string]$Values[$name]) -match '/volume1') { $problems += "$name points at /volume1; this service lives on /volume2" }
     }
     $problems
+}
+
+function Test-GitHubAppKey {
+    # Problems with the private key file, naming the setting and path only, never the key.
+    param([Parameter(Mandatory)][System.Collections.Specialized.OrderedDictionary]$Values)
+    $path = [string]$Values[$KeyFileSetting]
+    if (-not $path) { return "$KeyFileSetting is not set (the path to the app's .pem file on this PC)" }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return "$KeyFileSetting points at $path, which does not exist" }
+    if ([System.IO.File]::ReadAllText($path) -notmatch '-----BEGIN [A-Z ]*PRIVATE KEY-----') {
+        return "$KeyFileSetting points at $path, which is not a PEM private key"
+    }
 }
 
 function ConvertTo-EnvText {
@@ -52,7 +72,7 @@ function ConvertTo-EnvText {
     (($Values.Keys | ForEach-Object { "$_=$($Values[$_])" }) -join "`n") + "`n"
 }
 
-function Send-EnvText {
+function Send-SecretText {
     # Writes the bytes over stdin, readable only by the remote user, with no byte order mark:
     # a BOM made Docker read the first name as "<BOM>NAME" on this NAS.
     param([string]$Text, [string]$Target, [string]$KeyPath, [string]$Path)
@@ -78,11 +98,15 @@ if ($MyInvocation.InvocationName -ne '.') {
     if (-not $LocalFile) { $LocalFile = Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime.env' }
     if (-not (Test-Path -LiteralPath $LocalFile)) { throw "$LocalFile does not exist. Copy .env.example to it and fill it in." }
     $values = Read-EnvFile $LocalFile
-    $problems = Test-RuntimeSetting -Values $values
+    $problems = @(Test-RuntimeSetting -Values $values) + @(Test-GitHubAppKey -Values $values) | Where-Object { $_ }
     if ($problems) {
         $problems | ForEach-Object { Write-Output "  PROBLEM  $_" }
         throw 'Nothing was sent to the NAS. Fix the settings above and run this again.'
     }
-    Send-EnvText -Text (ConvertTo-EnvText $values) -Target "$RemoteUser@$NasHost" -KeyPath $SshKeyPath -Path $RemoteFile
-    Write-Output "Saved $($values.Count) settings to $RemoteFile (readable only by $RemoteUser)."
+    $target = "$RemoteUser@$NasHost"
+    $keyText = [System.IO.File]::ReadAllText([string]$values[$KeyFileSetting])
+    Send-SecretText -Text $keyText -Target $target -KeyPath $SshKeyPath -Path $RemoteKeyFile
+    $values.Remove($KeyFileSetting)
+    Send-SecretText -Text (ConvertTo-EnvText $values) -Target $target -KeyPath $SshKeyPath -Path $RemoteFile
+    Write-Output "Saved the GitHub App key to $RemoteKeyFile and $($values.Count) settings to $RemoteFile (readable only by $RemoteUser)."
 }

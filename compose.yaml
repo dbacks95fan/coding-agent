@@ -15,6 +15,7 @@ services:
       PORT: "8081"
       CODING_AGENT_WORK_ROOT: /work
       CODING_AGENT_MANIFEST: /config/manifest.json
+      CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE: /config/github-app.pem
       # Shared caches so each run does not re-download dependencies and browsers.
       CODING_AGENT_COMMAND_ENV_npm_config_cache: /cache/npm
       CODING_AGENT_COMMAND_ENV_PLAYWRIGHT_BROWSERS_PATH: /cache/ms-playwright
@@ -22,6 +23,8 @@ services:
       - "${CODING_AGENT_DATA:-/volume2/docker/coding-agent-data}/work:/work"
       - "${CODING_AGENT_DATA:-/volume2/docker/coding-agent-data}/cache:/cache"
       - ./manifest.json:/config/manifest.json:ro
+      # The installer places this copy, owned by the container user and readable only by it.
+      - "${CODING_AGENT_DATA:-/volume2/docker/coding-agent-data}/secrets/github-app.pem:/config/github-app.pem:ro"
     read_only: true
     tmpfs:
       - /tmp

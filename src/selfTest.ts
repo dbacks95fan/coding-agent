@@ -1,11 +1,12 @@
 // Copyright (c) 2026 DPSystems, LLC.
-// ABOUTME: Deployment self-test: toolchain present, Git remotes reachable with the configured token, model reachable.
+// ABOUTME: Deployment self-test: toolchain present, GitHub App tokens issued, Git remotes reachable, model reachable.
 // ABOUTME: Used by the installer before it reports a deployment as working.
 import Anthropic from "@anthropic-ai/sdk";
 import { join } from "node:path";
 import { runCommand, sandboxEnv } from "./commands.js";
 import { secretValues, type RuntimeConfig } from "./config.js";
-import { DriverGit } from "./git.js";
+import { DriverGit, type GitAccess, type GitCredentials } from "./git.js";
+import { githubRepository } from "./githubApp.js";
 import type { CheckManifest } from "./manifest.js";
 import { redact } from "./redact.js";
 
@@ -31,15 +32,10 @@ export function anthropicProbe(config: RuntimeConfig): ModelProbe {
   };
 }
 
-export async function runSelfTest(
-  config: RuntimeConfig,
-  manifest: CheckManifest,
-  probe: ModelProbe,
-  scratch: string,
-): Promise<SelfTestResult[]> {
-  const results: SelfTestResult[] = [];
-  const secrets = secretValues(config);
-  const record = async (name: string, check: () => Promise<string>) => {
+type Recorder = (name: string, check: () => Promise<string>) => Promise<void>;
+
+function recorder(results: SelfTestResult[], secrets: string[]): Recorder {
+  return async (name, check) => {
     try {
       results.push({ name, outcome: "pass", detail: redact(await check(), secrets) });
     } catch (err) {
@@ -50,6 +46,45 @@ export async function runSelfTest(
       });
     }
   };
+}
+
+/**
+ * Asks for every token a run can need: write for each target repository, read for
+ * every repository. Local remotes need none and are skipped.
+ */
+export async function githubAccessChecks(
+  manifest: CheckManifest,
+  credentials: GitCredentials | undefined,
+  secrets: string[],
+): Promise<SelfTestResult[]> {
+  const results: SelfTestResult[] = [];
+  const record = recorder(results, secrets);
+  const wanted: [string, GitAccess][] = [
+    ...manifest.repositories.map((r): [string, GitAccess] => [r.url, "write"]),
+    ...manifest.repositories.map((r): [string, GitAccess] => [r.url, "read"]),
+    ...manifest.intent_repositories.map((url): [string, GitAccess] => [url, "read"]),
+  ];
+  for (const [url, access] of wanted) {
+    if (!githubRepository(url)) continue;
+    await record(`github app ${access} token: ${url}`, async () => {
+      if (!credentials) throw new Error("No GitHub App is configured; set the CODING_AGENT_GITHUB_APP_* settings.");
+      if (!(await credentials.tokenFor(url, access))) throw new Error("No token was issued.");
+      return `GitHub issued a ${access}-only token for this repository alone.`;
+    });
+  }
+  return results;
+}
+
+export async function runSelfTest(
+  config: RuntimeConfig,
+  manifest: CheckManifest,
+  probe: ModelProbe,
+  scratch: string,
+  credentials?: GitCredentials,
+): Promise<SelfTestResult[]> {
+  const results: SelfTestResult[] = [];
+  const secrets = secretValues(config);
+  const record = recorder(results, secrets);
 
   for (const program of ["git --version", "node --version", "npm --version"]) {
     await record(`toolchain: ${program}`, async () => {
@@ -66,11 +101,13 @@ export async function runSelfTest(
     });
   }
 
-  const git = new DriverGit(join(scratch, "git-home"), config.gitIdentity, config.gitToken);
+  results.push(...(await githubAccessChecks(manifest, credentials, secrets)));
+
+  const git = new DriverGit(join(scratch, "git-home"), config.gitIdentity, credentials);
   const remotes = [...manifest.repositories.map((r) => r.url), ...manifest.intent_repositories];
   for (const url of remotes) {
     await record(`git read access: ${url}`, async () => {
-      const out = await git.run(["ls-remote", "--heads", url], scratch);
+      const out = await git.run(["ls-remote", "--heads", url], scratch, { url, access: "read" });
       return `${out.split("\n").filter(Boolean).length} branch(es) visible.`;
     });
   }

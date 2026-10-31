@@ -40,7 +40,7 @@ node dist/cli.js self-test
 | `GET /health` | none | `200 {"status":"ok","busy":bool}` |
 | `POST /invocations` | Bearer | Body is a StageInvocation. `202` starts it; resubmitting the same body is idempotent; different content for the same ID or a second concurrent run returns `409`. |
 | `GET /invocations/{id}` | Bearer | `{"state":"running"}` or `{"state":"done","stage_result":â€¦,"evidence_package":â€¦,"diagnostics":â€¦}` |
-| `POST /self-test` | Bearer | Toolchain, Git access to every manifest repository, and one tiny model request. `200` all pass, `503` otherwise. |
+| `POST /self-test` | Bearer | Toolchain, a GitHub App token for every access a run can need, Git access to every manifest repository, and one tiny model request. `200` all pass, `503` otherwise. |
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for what the Conductor must send and verify.
 
@@ -51,7 +51,7 @@ Environment variables (see `.env.example`):
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | required | Claude API key |
-| `CODING_AGENT_GIT_TOKEN` (or `GITHUB_TOKEN`) | none | Token used only by the driver's own Git calls |
+| `CODING_AGENT_GITHUB_APP_ID` / `_INSTALLATION_ID` / `_PRIVATE_KEY_FILE` | none | GitHub App for the driver's own Git calls. All three or none; none only suits local remotes. See [GitHub access](#github-access). |
 | `CODING_AGENT_API_TOKEN` | required for `serve` | Bearer token the Conductor sends |
 | `CODING_AGENT_MANIFEST` | `/etc/coding-agent/manifest.json` | Trusted repositories, setup, and check commands ([MealFlow](config/manifest.json)) |
 | `CODING_AGENT_MODEL` / `CODING_AGENT_EFFORT` | `claude-opus-5-5` / `high` | Execution-plane model and effort |
@@ -62,14 +62,23 @@ Environment variables (see `.env.example`):
 | `CODING_AGENT_SHELL` | `bash` | Shell for agent commands, setup, and checks |
 | `CODING_AGENT_COMMAND_ENV_<NAME>` | none | Passed to commands as `<NAME>` (for example shared npm and Playwright caches) |
 
+## GitHub access
+
+The driver authenticates as a GitHub App, never with a personal token. One fine-grained personal token cannot be read/write on a product repository and read-only on intent-backlog at once; an app can, because each token it mints names its own repositories and permissions.
+
+- The app (`dpsystems-agents-app`) has **Contents: read and write** and **Metadata: read**, webhooks off, and is installed only on the repositories in the manifest.
+- For each Git call the driver asks for a one-hour token limited to that call's one repository: **write** only to push to the target repository, **read** for everything else. Tokens are reused until ten minutes before they expire. A token GitHub returns with any wider scope is refused.
+- The private key stays in the service process. Git sees only the minted token, through a credential helper that reads it from the Git child's environment; agent shell commands never receive it.
+- Each agent gets its own app, so its commits carry its own identity and one app can be revoked without touching the others.
+
 ## Deploying on the NAS
 
 The container never runs the Claude Code CLI, which cannot run on the NAS's 3.10 kernel; it calls the Messages API with an API key. It runs as uid 10001 with a read-only root, no capabilities, host networking on port 8081 (bridge NAT drops outbound traffic on this NAS, and the Evaluator owns 8080), and data under `/volume2/docker/coding-agent-data`.
 
-1. Copy `.env.example` to `.runtime.env` (gitignored) and fill in `ANTHROPIC_API_KEY`, `CODING_AGENT_GIT_TOKEN` (fine-grained: contents read/write on the product repository, read on intent-backlog), and a random `CODING_AGENT_API_TOKEN` of at least 32 characters.
-2. `scripts/set-nas-secrets.ps1` checks that file and writes it to `/volume2/docker/coding-agent/.runtime.env` (mode 600) over SSH stdin. Values are never printed or put on a command line.
+1. Copy `.env.example` to `.runtime.env` (gitignored) and fill in `ANTHROPIC_API_KEY`, the GitHub App's ID, installation ID, and the path to its `.pem` private key on this PC, and a random `CODING_AGENT_API_TOKEN` of at least 32 characters.
+2. `scripts/set-nas-secrets.ps1` checks that file and the key, then writes the key to `/volume2/docker/coding-agent/github-app.pem` and the settings to `/volume2/docker/coding-agent/.runtime.env` (both mode 600) over SSH stdin. Values are never printed or put on a command line.
 3. `scripts/deploy-synology.ps1` builds the image from a committed revision on this PC, gzips it with the compose file, installer, and `config/manifest.json`, stages it under `/volume2/docker/coding-agent-data/incoming` (not `/tmp`, which is a RAM disk smaller than the image), and runs `scripts/install-on-nas.sh`.
-4. The installer refuses to change anything if a secret is missing, then loads the image, starts it with the NAS's `docker-compose` 1.28, and reports success only when `GET /health` returns `200` and `POST /self-test` passes. The self-test makes one tiny paid model request.
+4. The installer refuses to change anything if a secret or the key is missing, then loads the image, copies the key to `/volume2/docker/coding-agent-data/secrets` readable only by the container user, starts it with the NAS's `docker-compose` 1.28, and reports success only when `GET /health` returns `200` and `POST /self-test` passes. The self-test makes one tiny paid model request.
 
 Defaults: host `10.100.10.10`, user `DockerDeploy`, key `~/.ssh/nas_key`. `npm run test:deploy` runs the Pester tests for these scripts.
 ## Documentation

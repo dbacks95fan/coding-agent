@@ -11,6 +11,7 @@ port=${CODING_AGENT_PORT:-8081}
 docker=/usr/local/bin/docker
 compose=/usr/local/bin/docker-compose
 secrets="$app_dir/.runtime.env"
+app_key="$app_dir/github-app.pem"
 
 fail() {
   echo "INSTALL FAILED: $*" >&2
@@ -24,18 +25,25 @@ image=$(sed -n 's/^image=//p' manifest.txt)
 
 # Secrets first: a deployment that cannot start must not replace one that can.
 [ -f "$secrets" ] || fail "missing $secrets (run scripts/set-nas-secrets.ps1 from the workstation)"
-for name in ANTHROPIC_API_KEY CODING_AGENT_GIT_TOKEN CODING_AGENT_API_TOKEN; do
+for name in ANTHROPIC_API_KEY CODING_AGENT_GITHUB_APP_ID CODING_AGENT_GITHUB_APP_INSTALLATION_ID CODING_AGENT_API_TOKEN; do
   grep -q "^$name=..*" "$secrets" || fail "$name is not set in $secrets"
 done
+[ -s "$app_key" ] || fail "missing $app_key (run scripts/set-nas-secrets.ps1 from the workstation)"
+grep -q 'PRIVATE KEY-----' "$app_key" || fail "$app_key is not a PEM private key"
 
 echo "Loading $image"
 sudo "$docker" load -i image.tar >/dev/null
 
-mkdir -p "$app_dir" "$data_dir/work" "$data_dir/cache"
+mkdir -p "$app_dir" "$data_dir/work" "$data_dir/cache" "$data_dir/secrets"
 # The container runs as uid 10001; its data folders must be writable by that user.
 # Only work/ and cache/: the upload folder beside them stays DockerDeploy's so it can be cleaned up.
 sudo "$docker" run --rm --user root --entrypoint chown \
   -v "$data_dir/work:/data/work" -v "$data_dir/cache:/data/cache" "$image" -R 10001:999 /data/work /data/cache
+# The uploaded key is readable only by DockerDeploy; the service reads a copy readable only by uid 10001.
+# This NAS allows DockerDeploy passwordless sudo for docker alone, so a root container makes the copy.
+sudo "$docker" run --rm --user root --entrypoint sh \
+  -v "$app_key:/in/github-app.pem:ro" -v "$data_dir/secrets:/out" "$image" \
+  -c 'cp /in/github-app.pem /out/github-app.pem && chown 10001:999 /out/github-app.pem && chmod 400 /out/github-app.pem'
 cp compose.yaml "$app_dir/docker-compose.yml"
 cp manifest.json "$app_dir/manifest.json"
 printf 'CODING_AGENT_IMAGE=%s\nCODING_AGENT_DATA=%s\n' "$image" "$data_dir" >"$app_dir/.env"
@@ -55,7 +63,7 @@ until curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1; do
 done
 echo "PASS health: $(curl -fsS "http://127.0.0.1:$port/health")"
 
-# The self-test makes one tiny model request and checks Git access with the configured token.
+# The self-test makes one tiny model request and checks GitHub App tokens and Git access.
 # The bearer header goes through a private file so the token never appears in the process list.
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT

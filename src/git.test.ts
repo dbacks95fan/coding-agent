@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { DriverGit } from "./git.js";
+import { DriverGit, type GitAccess } from "./git.js";
 import { git, removeDir, tempDir, TestRemote, writeBytes } from "./testSupport.js";
 
 let root: string;
@@ -78,6 +78,50 @@ test("hooks planted in the workspace do not run during driver commits", async ()
   writeBytes(dir, "c.txt", "c");
   await driver.commitCandidate(dir, base, "candidate");
   assert.equal(git(dir, ["status", "--porcelain"]), "");
+});
+
+test("asks for read access to fetch and clone, and write access only to push", async () => {
+  const requests: [string, GitAccess][] = [];
+  const recording = new DriverGit(
+    join(root, "driver-home-creds"),
+    { name: "coding-agent", email: "agent@example.com" },
+    {
+      tokenFor: async (url, access) => {
+        requests.push([url, access]);
+        // A token for a local remote is configured but never offered, so the calls still work.
+        return "ghs_test_token_value_123456";
+      },
+    },
+  );
+  remote.branchFrom(base, "work/INT-3");
+  const dir = join(root, "clone-creds");
+  assert.equal(await recording.remoteTip(remote.url, "work/INT-3", root), base);
+  await recording.cloneBranch(remote.url, "work/INT-3", dir, root);
+  await recording.fetchCommit(remote.url, base, join(root, "fetch-creds"));
+  assert.deepEqual(
+    requests.map(([, access]) => access),
+    ["read", "read", "read"],
+  );
+
+  writeBytes(dir, "f.txt", "f");
+  const candidate = await recording.commitCandidate(dir, base, "candidate");
+  assert.equal(requests.length, 3, "local operations ask for no token");
+  await recording.pushFastForward(dir, remote.url, candidate, "work/INT-3");
+  assert.deepEqual(requests.at(-1), [remote.url, "write"]);
+  assert.equal(remote.tip("work/INT-3"), candidate);
+});
+
+test("a credential failure stops the Git call before it runs", async () => {
+  const failing = new DriverGit(
+    join(root, "driver-home-fail"),
+    { name: "coding-agent", email: "agent@example.com" },
+    {
+      tokenFor: async () => {
+        throw new Error("GitHub refused a read token");
+      },
+    },
+  );
+  await assert.rejects(failing.remoteTip(remote.url, "work/INT-1", root), /refused a read token/);
 });
 
 test("pushFastForward advances the branch and refuses a non-fast-forward", async () => {

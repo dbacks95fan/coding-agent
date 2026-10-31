@@ -18,7 +18,7 @@ import {
   scopeViolations,
   type Verdict,
 } from "./evidence.js";
-import { DriverGit } from "./git.js";
+import { DriverGit, type GitCredentials } from "./git.js";
 import { admitInvocation, BlockedError, identityOf, type AdmittedInvocation } from "./invocation.js";
 import { validateRecord } from "./lifecycle.js";
 import type { Logger } from "./log.js";
@@ -33,6 +33,8 @@ export interface RunDependencies {
   manifest: CheckManifest;
   model: ModelClient;
   log: Logger;
+  /** Absent when every remote is local and needs no token. */
+  credentials?: GitCredentials;
 }
 
 /** Diagnostic detail for people and logs. Not a lifecycle record; the StageResult is authoritative. */
@@ -138,7 +140,7 @@ async function execute(
 ): Promise<RunOutcome> {
   const { config, log } = deps;
   const admitted = admitInvocation(raw, deps.manifest);
-  const git = new DriverGit(join(runDir, "git-home"), config.gitIdentity, config.gitToken);
+  const git = new DriverGit(join(runDir, "git-home"), config.gitIdentity, deps.credentials);
   const verified = await prepareWorkspace(admitted, git, runDir);
   log("preflight_passed", { invocationId: admitted.invocation.invocation_id, handoff: verified.handoff });
 

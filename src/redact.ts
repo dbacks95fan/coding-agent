@@ -4,7 +4,10 @@
 const PATTERNS: RegExp[] = [
   /sk-ant-[A-Za-z0-9_-]{8,}/g,
   /github_pat_[A-Za-z0-9_]{20,}/g,
-  /gh[pousr]_[A-Za-z0-9]{20,}/g,
+  // Includes GitHub's stateless installation tokens (ghs_<app id>_<JWT>), which contain "_", ".", and "-".
+  /gh[pousr]_[A-Za-z0-9_.-]{20,}/g,
+  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
   /(authorization:\s*bearer\s+)[^\s"']+/gi,
   /(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi,
 ];

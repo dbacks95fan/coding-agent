@@ -22,6 +22,21 @@ test("redacts Anthropic keys, GitHub tokens, bearer headers, and URL credentials
   assert.ok(out.includes("https://[REDACTED]@github.com/x/y.git"));
 });
 
+test("redacts GitHub App installation tokens, JWTs, and PEM private keys", () => {
+  const text = [
+    "classic ghs_16C7e42F292c6912E7710c838347Ae178B4a",
+    "stateless ghs_5555873_eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiI1NTU1ODczIn0.c2lnbmF0dXJlLWJ5dGVz",
+    "jwt eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiI1NTU1ODczIn0.c2lnbmF0dXJlLWJ5dGVz",
+    "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\nqwerty\n-----END RSA PRIVATE KEY-----",
+  ].join("\n");
+  const out = redact(text);
+  assert.ok(!out.includes("16C7e42F"));
+  assert.ok(!out.includes("5555873_"));
+  assert.ok(!out.includes("eyJ"));
+  assert.ok(!out.includes("MIIEpAIBAAKCAQEA"));
+  assert.equal(out.split("[REDACTED]").length - 1, 4);
+});
+
 test("redacts explicitly supplied secret values", () => {
   assert.equal(redact("value=supersecretvalue!", ["supersecretvalue"]), "value=[REDACTED]!");
 });

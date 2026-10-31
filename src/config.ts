@@ -1,7 +1,10 @@
 // Copyright (c) 2026 DPSystems, LLC.
 // ABOUTME: Reads runtime configuration from the environment; secrets are never logged or passed to children.
+import { createPrivateKey } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { GitHubAppSettings } from "./githubApp.js";
 
 export interface Prices {
   inputPerMTok: number;
@@ -27,7 +30,8 @@ export interface RuntimeConfig {
   serverSideFallback: boolean;
   prices: Prices;
   limits: AgentLimits;
-  gitToken?: string;
+  /** Absent when no remote needs credentials, as with local test repositories. */
+  githubApp?: GitHubAppSettings;
   gitIdentity: { name: string; email: string };
   apiToken?: string;
   manifestPath: string;
@@ -51,9 +55,53 @@ function number(env: NodeJS.ProcessEnv, name: string, fallback: number): number 
 /** Variables with this prefix are forwarded to commands with the prefix removed. */
 const COMMAND_ENV_PREFIX = "CODING_AGENT_COMMAND_ENV_";
 
+const GITHUB_APP_SETTINGS = [
+  "CODING_AGENT_GITHUB_APP_ID",
+  "CODING_AGENT_GITHUB_APP_INSTALLATION_ID",
+  "CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE",
+] as const;
+
+/** All three settings or none; error messages name the file and settings, never the key. */
+function githubAppSettings(env: NodeJS.ProcessEnv): GitHubAppSettings | undefined {
+  const missing = GITHUB_APP_SETTINGS.filter((name) => !env[name]);
+  if (missing.length === GITHUB_APP_SETTINGS.length) return undefined;
+  if (missing.length) throw new Error(`GitHub App settings are incomplete; also set ${missing.join(", ")}.`);
+
+  const appId = env.CODING_AGENT_GITHUB_APP_ID as string;
+  const installationId = env.CODING_AGENT_GITHUB_APP_INSTALLATION_ID as string;
+  const keyFile = env.CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE as string;
+  if (!/^\d+$/.test(appId)) throw new Error("CODING_AGENT_GITHUB_APP_ID must be the app's numeric App ID.");
+  if (!/^\d+$/.test(installationId)) {
+    throw new Error("CODING_AGENT_GITHUB_APP_INSTALLATION_ID must be the numeric installation ID.");
+  }
+
+  let privateKey: string;
+  try {
+    privateKey = readFileSync(keyFile, "utf8");
+  } catch (err) {
+    throw new Error(
+      `Cannot read the GitHub App private key file ${keyFile} (${(err as NodeJS.ErrnoException).code}).`,
+      {
+        cause: err,
+      },
+    );
+  }
+  try {
+    createPrivateKey(privateKey);
+  } catch {
+    throw new Error(`The GitHub App private key file ${keyFile} does not hold a usable private key.`);
+  }
+  return { appId, installationId, privateKey, apiUrl: env.CODING_AGENT_GITHUB_API_URL || "https://api.github.com" };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const effort = (env.CODING_AGENT_EFFORT ?? "high") as RuntimeConfig["effort"];
   if (!EFFORTS.includes(effort)) throw new Error(`CODING_AGENT_EFFORT must be one of ${EFFORTS.join(", ")}.`);
+  if (env.CODING_AGENT_GIT_TOKEN) {
+    throw new Error(
+      "CODING_AGENT_GIT_TOKEN is no longer used; remove it and set the CODING_AGENT_GITHUB_APP_* settings instead.",
+    );
+  }
 
   const commandEnv: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
@@ -84,7 +132,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       setupTimeoutMs: number(env, "CODING_AGENT_SETUP_TIMEOUT_MIN", 20) * 60_000,
       maxToolOutputChars: number(env, "CODING_AGENT_MAX_TOOL_OUTPUT_CHARS", 30_000),
     },
-    gitToken: env.CODING_AGENT_GIT_TOKEN || env.GITHUB_TOKEN || undefined,
+    githubApp: githubAppSettings(env),
     gitIdentity: {
       name: env.CODING_AGENT_GIT_NAME ?? "coding-agent",
       email: env.CODING_AGENT_GIT_EMAIL ?? "coding-agent@users.noreply.github.com",
@@ -100,5 +148,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
 
 /** Values that must be scrubbed from any text this process emits. */
 export function secretValues(config: RuntimeConfig): string[] {
-  return [config.anthropicApiKey, config.gitToken, config.apiToken].filter((v): v is string => Boolean(v));
+  return [config.anthropicApiKey, config.githubApp?.privateKey, config.apiToken].filter((v): v is string => Boolean(v));
 }

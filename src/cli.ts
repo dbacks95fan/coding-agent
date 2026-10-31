@@ -5,6 +5,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AnthropicModelClient } from "./agentLoop.js";
 import { loadConfig, secretValues, type RuntimeConfig } from "./config.js";
+import type { GitCredentials } from "./git.js";
+import { GitHubAppCredentials } from "./githubApp.js";
 import { createLogger } from "./log.js";
 import { loadManifest } from "./manifest.js";
 import { redact } from "./redact.js";
@@ -33,10 +35,10 @@ function requireModelKey(config: RuntimeConfig): void {
   if (!config.anthropicApiKey) throw new Error("ANTHROPIC_API_KEY is not set.");
 }
 
-async function selfTest(config: RuntimeConfig) {
+async function selfTest(config: RuntimeConfig, credentials: GitCredentials | undefined) {
   const scratch = mkdtempSync(join(config.workRoot, "self-test-"));
   try {
-    return await runSelfTest(config, loadManifest(config.manifestPath), anthropicProbe(config), scratch);
+    return await runSelfTest(config, loadManifest(config.manifestPath), anthropicProbe(config), scratch, credentials);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -47,6 +49,8 @@ async function main(argv: string[]): Promise<number> {
   const config = loadConfig();
   const secrets = secretValues(config);
   const log = createLogger(secrets);
+  // One instance per process, so runs and self-tests reuse tokens until they near expiry.
+  const credentials = config.githubApp ? new GitHubAppCredentials(config.githubApp) : undefined;
   mkdirSync(config.workRoot, { recursive: true });
 
   if (command === "run") {
@@ -63,6 +67,7 @@ async function main(argv: string[]): Promise<number> {
       manifest: loadManifest(config.manifestPath),
       model: new AnthropicModelClient(config),
       log,
+      credentials,
     });
     process.stdout.write(
       `${redact(JSON.stringify({ stage_result: outcome.stageResult, evidence_package: outcome.evidencePackage, diagnostics: outcome.diagnostics }, null, 2), secrets)}\n`,
@@ -80,8 +85,8 @@ async function main(argv: string[]): Promise<number> {
       apiToken: config.apiToken,
       secrets,
       log,
-      execute: (raw) => executeInvocation(raw, { config, manifest, model, log }),
-      selfTest: () => selfTest(config),
+      execute: (raw) => executeInvocation(raw, { config, manifest, model, log, credentials }),
+      selfTest: () => selfTest(config, credentials),
     });
     server.listen(config.port, () => log("service_listening", { port: config.port, model: config.model }));
     return new Promise<number>((resolvePromise) => {
@@ -93,7 +98,7 @@ async function main(argv: string[]): Promise<number> {
 
   if (command === "self-test") {
     requireModelKey(config);
-    const results = await selfTest(config);
+    const results = await selfTest(config, credentials);
     process.stdout.write(`${JSON.stringify({ results }, null, 2)}\n`);
     return results.every((r) => r.outcome === "pass") ? 0 : 1;
   }

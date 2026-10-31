@@ -70,9 +70,10 @@ Describe 'set-nas-secrets' {
     }
     BeforeEach {
         $script:good = [ordered]@{
-            ANTHROPIC_API_KEY      = 'sk-ant-real-looking-value'
-            CODING_AGENT_GIT_TOKEN = 'github_pat_real_looking_value'
-            CODING_AGENT_API_TOKEN = 'x' * 40
+            ANTHROPIC_API_KEY                       = 'sk-ant-real-looking-value'
+            CODING_AGENT_GITHUB_APP_ID              = '5555873'
+            CODING_AGENT_GITHUB_APP_INSTALLATION_ID = '177232772'
+            CODING_AGENT_API_TOKEN                  = 'x' * 40
         }
     }
 
@@ -84,9 +85,43 @@ Describe 'set-nas-secrets' {
         $values = [ordered]@{ CODING_AGENT_API_TOKEN = 'tiny-secret-value' }
         $problems = Test-RuntimeSetting -Values $values
         $problems | Should -Contain 'ANTHROPIC_API_KEY is not set'
-        $problems | Should -Contain 'CODING_AGENT_GIT_TOKEN is not set'
+        $problems | Should -Contain 'CODING_AGENT_GITHUB_APP_ID is not set'
+        $problems | Should -Contain 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID is not set'
         $problems | Should -Contain 'CODING_AGENT_API_TOKEN is shorter than 32 characters'
         ($problems -join ' ') | Should -Not -Match 'tiny-secret-value'
+    }
+
+    It 'refuses non-numeric GitHub App IDs' {
+        $good['CODING_AGENT_GITHUB_APP_ID'] = 'Iv23lighUM0vlezmbCTG'
+        Test-RuntimeSetting -Values $good | Should -Contain 'CODING_AGENT_GITHUB_APP_ID must be a number'
+    }
+
+    It 'refuses the retired single GitHub token' {
+        $good['CODING_AGENT_GIT_TOKEN'] = 'github_pat_old_value'
+        $problems = Test-RuntimeSetting -Values $good
+        $problems | Should -Contain 'CODING_AGENT_GIT_TOKEN is no longer used; remove it'
+        ($problems -join ' ') | Should -Not -Match 'github_pat_old_value'
+    }
+
+    It 'checks the GitHub App key file by path without showing its contents' {
+        $file = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid())
+        try {
+            Test-GitHubAppKey -Values $good | Should -Match 'CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE is not set'
+
+            $good['CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE'] = $file
+            Test-GitHubAppKey -Values $good | Should -Match 'does not exist'
+
+            [System.IO.File]::WriteAllText($file, 'secret-but-not-a-key')
+            $problem = Test-GitHubAppKey -Values $good
+            $problem | Should -Match 'is not a PEM private key'
+            $problem | Should -Not -Match 'secret-but-not-a-key'
+
+            [System.IO.File]::WriteAllText($file, "-----BEGIN RSA PRIVATE KEY-----`nabc`n-----END RSA PRIVATE KEY-----`n")
+            Test-GitHubAppKey -Values $good | Should -BeNullOrEmpty
+        }
+        finally {
+            Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+        }
     }
 
     It 'refuses the .env.example placeholders' {
@@ -157,8 +192,29 @@ Describe 'deployment files agree' {
         }
     }
 
-    It 'checks secrets before loading the image' {
+    It 'checks secrets and the GitHub App key before loading the image' {
         $install = Get-Content -LiteralPath (Join-Path $repo 'scripts\install-on-nas.sh') -Raw
-        $install.IndexOf('CODING_AGENT_API_TOKEN; do') | Should -BeLessThan $install.IndexOf('docker" load')
+        $load = $install.IndexOf('docker" load')
+        $install.IndexOf('CODING_AGENT_API_TOKEN; do') | Should -BeLessThan $load
+        $install.IndexOf('[ -s "$app_key" ]') | Should -BeGreaterThan 0
+        $install.IndexOf('[ -s "$app_key" ]') | Should -BeLessThan $load
+    }
+
+    It 'gives the container a read-only key at the path the service reads, from where the installer puts it' {
+        $compose = Get-Content -LiteralPath (Join-Path $repo 'compose.yaml') -Raw
+        $install = Get-Content -LiteralPath (Join-Path $repo 'scripts\install-on-nas.sh') -Raw
+        $compose | Should -Match 'CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE: /config/github-app.pem'
+        $compose | Should -Match '/secrets/github-app.pem:/config/github-app.pem:ro'
+        $install | Should -Match '-v "\$data_dir/secrets:/out"'
+        $install | Should -Match 'chown 10001:999 /out/github-app.pem && chmod 400'
+    }
+
+    It 'uploads the key to the path the installer reads' {
+        $install = Get-Content -LiteralPath (Join-Path $repo 'scripts\install-on-nas.sh') -Raw
+        $install | Should -Match 'app_key="\$app_dir/github-app.pem"'
+        (Get-Command (Join-Path $repo 'scripts\set-nas-secrets.ps1')).Parameters['RemoteKeyFile'] | Should -Not -BeNullOrEmpty
+        $secretsScript = Get-Content -LiteralPath (Join-Path $repo 'scripts\set-nas-secrets.ps1') -Raw
+        $secretsScript | Should -Match "RemoteKeyFile = '/volume2/docker/coding-agent/github-app.pem'"
+        $install | Should -Match 'app_dir=\$\{CODING_AGENT_APP_DIR:-/volume2/docker/coding-agent\}'
     }
 }

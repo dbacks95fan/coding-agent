@@ -15,12 +15,24 @@ export interface GitIdentity {
 
 export class GitError extends Error {}
 
+export type GitAccess = "read" | "write";
+
+/** Supplies the token for one remote at one access level; undefined means the remote needs none. */
+export interface GitCredentials {
+  tokenFor(url: string, access: GitAccess): Promise<string | undefined>;
+}
+
+interface Remote {
+  url: string;
+  access: GitAccess;
+}
+
 /**
- * The credential helper reads the token from this process's environment at call
+ * The credential helper reads the token from the Git child's environment at call
  * time, so the token never appears in argv, a URL, or a file in the workspace.
  */
 const CREDENTIAL_HELPER =
-  '!f() { test "$1" = get || exit 0; echo username=x-access-token; echo "password=$CODING_AGENT_GIT_TOKEN"; }; f';
+  '!f() { test "$1" = get || exit 0; echo username=x-access-token; echo "password=$CODING_AGENT_DRIVER_GIT_TOKEN"; }; f';
 
 export class DriverGit {
   private readonly globalConfig: string;
@@ -29,7 +41,7 @@ export class DriverGit {
   constructor(
     private readonly home: string,
     private readonly identity: GitIdentity,
-    private readonly token?: string,
+    private readonly credentials?: GitCredentials,
   ) {
     mkdirSync(home, { recursive: true });
     this.globalConfig = join(home, "driver.gitconfig");
@@ -38,7 +50,7 @@ export class DriverGit {
     writeFileSync(this.globalConfig, "");
   }
 
-  private env(): NodeJS.ProcessEnv {
+  private env(token?: string): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
       HOME: this.home,
@@ -53,11 +65,11 @@ export class DriverGit {
     for (const name of ["SystemRoot", "ComSpec", "PATHEXT", "TEMP", "TMP"]) {
       if (process.env[name] !== undefined) env[name] = process.env[name];
     }
-    if (this.token) env.CODING_AGENT_GIT_TOKEN = this.token;
+    if (token) env.CODING_AGENT_DRIVER_GIT_TOKEN = token;
     return env;
   }
 
-  private baseArgs(): string[] {
+  private baseArgs(token?: string): string[] {
     const args = [
       "-c",
       `core.hooksPath=${this.hooksDir}`,
@@ -68,15 +80,17 @@ export class DriverGit {
       "-c",
       "safe.directory=*",
     ];
-    if (this.token) args.push("-c", "credential.helper=", "-c", `credential.helper=${CREDENTIAL_HELPER}`);
+    if (token) args.push("-c", "credential.helper=", "-c", `credential.helper=${CREDENTIAL_HELPER}`);
     return args;
   }
 
-  async run(args: string[], cwd: string): Promise<string> {
+  /** Runs one Git command; a call that talks to a remote names it so only that remote's token is supplied. */
+  async run(args: string[], cwd: string, remote?: Remote): Promise<string> {
+    const token = remote && this.credentials ? await this.credentials.tokenFor(remote.url, remote.access) : undefined;
     try {
-      const { stdout } = await execFileAsync("git", [...this.baseArgs(), ...args], {
+      const { stdout } = await execFileAsync("git", [...this.baseArgs(token), ...args], {
         cwd,
-        env: this.env(),
+        env: this.env(token),
         windowsHide: true,
         maxBuffer: 64 * 1024 * 1024,
       });
@@ -106,20 +120,23 @@ export class DriverGit {
 
   /** The commit the remote branch points at, or null when the branch does not exist. */
   async remoteTip(url: string, branch: string, cwd: string): Promise<string | null> {
-    const out = await this.run(["ls-remote", "--heads", url, `refs/heads/${branch}`], cwd);
+    const out = await this.run(["ls-remote", "--heads", url, `refs/heads/${branch}`], cwd, { url, access: "read" });
     const line = out.split("\n").find((l) => l.endsWith(`\trefs/heads/${branch}`));
     return line ? line.split("\t")[0] : null;
   }
 
   async cloneBranch(url: string, branch: string, dir: string, cwd: string): Promise<void> {
-    await this.run(["clone", "--quiet", "--no-tags", "--single-branch", "--branch", branch, url, dir], cwd);
+    await this.run(["clone", "--quiet", "--no-tags", "--single-branch", "--branch", branch, url, dir], cwd, {
+      url,
+      access: "read",
+    });
   }
 
   /** Fetches a single commit by SHA into a scratch repository for byte-exact reads. */
   async fetchCommit(url: string, commit: string, dir: string): Promise<void> {
     mkdirSync(dir, { recursive: true });
     await this.run(["init", "--quiet", "--bare"], dir);
-    await this.run(["fetch", "--quiet", "--depth", "1", url, commit], dir);
+    await this.run(["fetch", "--quiet", "--depth", "1", url, commit], dir, { url, access: "read" });
   }
 
   async head(repoDir: string): Promise<string> {
@@ -178,6 +195,9 @@ export class DriverGit {
 
   /** Pushes a commit to the branch without force; Git rejects it if the branch moved. */
   async pushFastForward(repoDir: string, url: string, commit: string, branch: string): Promise<void> {
-    await this.run(["push", "--quiet", "--porcelain", url, `${commit}:refs/heads/${branch}`], repoDir);
+    await this.run(["push", "--quiet", "--porcelain", url, `${commit}:refs/heads/${branch}`], repoDir, {
+      url,
+      access: "write",
+    });
   }
 }
