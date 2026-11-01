@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agentic-sdlc:lifecycle-contracts:1.2.0",
+  "$id": "urn:agentic-sdlc:lifecycle-contracts:1.3.0",
   "title": "Agentic SDLC lifecycle contracts",
   "description": "Shared machine-readable records for workflow handoffs. YAML documents MUST be parsed to JSON data before validation against these schemas.",
   "$defs": {
@@ -54,6 +54,18 @@
         "commit_sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
         "path": { "type": "string", "minLength": 1 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "TrelloRecordRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["board_id", "card_id", "comment_id", "author_id", "content_sha256"],
+      "properties": {
+        "board_id": { "type": "string", "minLength": 1 },
+        "card_id": { "type": "string", "minLength": 1 },
+        "comment_id": { "type": "string", "minLength": 1 },
+        "author_id": { "type": "string", "minLength": 1 },
+        "content_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
     },
     "WorkItem": {
@@ -400,16 +412,32 @@
         "rationale": { "type": "string", "minLength": 1 }
       }
     },
+    "DeploymentAuthorizationRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "work_item", "integration", "environment", "authorized_by", "recorded_at", "authorization_ref", "rationale"],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "work_item": { "$ref": "#/$defs/WorkItem" },
+        "integration": { "$ref": "#/$defs/CommitRef" },
+        "environment": { "type": "string", "minLength": 1 },
+        "authorized_by": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "authorization_ref": { "$ref": "#/$defs/TrelloRecordRef" },
+        "rationale": { "type": "string", "minLength": 1 }
+      }
+    },
     "ReleaseRecord": {
       "type": "object",
       "additionalProperties": false,
       "required": ["schema_version", "work_item", "candidate", "approval_record", "environment", "recorded_at", "actions", "verification", "status", "summary"],
       "properties": {
-        "schema_version": { "const": "1.0" },
+        "schema_version": { "const": "1.1" },
         "work_item": { "$ref": "#/$defs/WorkItem" },
         "candidate": { "$ref": "#/$defs/CommitRef" },
         "integration": { "$ref": "#/$defs/CommitRef" },
-        "approval_record": { "$ref": "#/$defs/ArtifactRef" },
+        "approval_record": { "$ref": "#/$defs/TrelloRecordRef" },
+        "deployment_authorization": { "$ref": "#/$defs/DeploymentAuthorizationRecord" },
         "environment": { "type": "string", "minLength": 1 },
         "recorded_at": { "type": "string", "format": "date-time" },
         "actions": { "type": "array", "items": { "type": "string" } },
@@ -421,7 +449,7 @@
       "allOf": [
         {
           "if": { "required": ["status"], "properties": { "status": { "enum": ["released", "rolled_back"] } } },
-          "then": { "required": ["integration"] }
+          "then": { "required": ["integration", "deployment_authorization"] }
         },
         {
           "if": { "required": ["status"], "properties": { "status": { "const": "rolled_back" } } },
@@ -436,7 +464,7 @@
       "properties": {
         "schema_version": { "const": "1.0" },
         "work_item": { "$ref": "#/$defs/WorkItem" },
-        "release_record": { "$ref": "#/$defs/ArtifactRef" },
+        "release_record": { "$ref": "#/$defs/TrelloRecordRef" },
         "observation_start": { "type": "string", "format": "date-time" },
         "observation_end": { "type": "string", "format": "date-time" },
         "signals": { "type": "array", "items": { "type": "string" } },
@@ -476,6 +504,7 @@
     { "$ref": "#/$defs/EvidencePackage" },
     { "$ref": "#/$defs/EvaluationPackage" },
     { "$ref": "#/$defs/HumanApprovalRecord" },
+    { "$ref": "#/$defs/DeploymentAuthorizationRecord" },
     { "$ref": "#/$defs/ReleaseRecord" },
     { "$ref": "#/$defs/ObservationRecord" },
     { "$ref": "#/$defs/ClosureRecord" }
