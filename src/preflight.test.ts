@@ -78,13 +78,32 @@ test("a frozen intent copy whose bytes changed (line endings) is blocked", async
   }
 });
 
-test("a frozen source that cannot be fetched from the intent backlog is blocked", async () => {
+test("the intent backlog is never contacted: preflight passes with it gone", async () => {
   const scenario = buildScenario();
   try {
-    scenario.invocation.freeze_activation.policy_profile.commit_sha = "f".repeat(40);
-    const reasons = await blockedReasons(scenario, "run");
-    assert.match(reasons, /Could not fetch frozen source/);
-    assert.match(reasons, /policy profile does not match the active freeze/);
+    removeDir(scenario.intents.bare);
+    const admitted = admitInvocation(scenario.invocation, scenario.manifest);
+    const verified = await prepareWorkspace(admitted, driverFor(scenario), join(scenario.root, "run"));
+    assert.equal(verified.intentText, scenario.intentText);
+    assert.equal(verified.profileText, scenario.profileText);
+  } finally {
+    removeDir(scenario.root);
+  }
+});
+
+test("a frozen policy profile copy that does not match the freeze is blocked", async () => {
+  const scenario = buildScenario();
+  try {
+    const edited = scenario.product.commit(
+      { ".agent/work/INT-T-0001/policy-profile.md": `${scenario.profileText}\nExtra control.\n` },
+      "profile copy edited",
+      "work/INT-T-0001",
+    );
+    scenario.invocation.target.commit_sha = edited;
+    assert.match(
+      await blockedReasons(scenario, "run"),
+      /frozen policy profile copy .* does not match its recorded SHA-256/,
+    );
   } finally {
     removeDir(scenario.root);
   }

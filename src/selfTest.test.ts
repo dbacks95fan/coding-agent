@@ -4,20 +4,29 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { loadConfig } from "./config.js";
+import { RoutedCredentials } from "./credentials.js";
 import type { GitAccess } from "./git.js";
-import { githubAccessChecks, judgeReadOnlyProbe, runSelfTest } from "./selfTest.js";
+import { githubAccessChecks, intentRefusalChecks, runSelfTest } from "./selfTest.js";
 import { buildScenario, removeDir, testShell } from "./testSupport.js";
 
-test("passes when the toolchain, remotes, and model probe all work", async () => {
+test("passes when the toolchain, remotes, intent refusal, and model probe all work", async () => {
   const scenario = buildScenario();
   try {
     const config = loadConfig({ CODING_AGENT_SHELL: testShell() });
-    const results = await runSelfTest(config, scenario.manifest, async () => "probe ok", scenario.root);
+    const results = await runSelfTest(
+      config,
+      scenario.manifest,
+      async () => "probe ok",
+      scenario.root,
+      new RoutedCredentials(scenario.manifest, undefined),
+    );
     assert.ok(
       results.every((r) => r.outcome === "pass"),
       JSON.stringify(results),
     );
     assert.ok(results.some((r) => r.name.startsWith("git read access") && /branch\(es\) visible/.test(r.detail)));
+    assert.ok(!results.some((r) => r.name === `git read access: ${scenario.intents.url}`), "intents are never read");
+    assert.ok(results.some((r) => r.name === `intent repository is refused: ${scenario.intents.url}`));
   } finally {
     removeDir(scenario.root);
   }
@@ -28,7 +37,11 @@ test("reports an unreachable remote and a failing model probe without leaking se
   try {
     const key = "sk-ant-api03-self-test-secret-999";
     const config = loadConfig({ CODING_AGENT_SHELL: testShell(), ANTHROPIC_API_KEY: key });
-    scenario.manifest.intent_repositories.push(`file:///${join(scenario.root, "missing.git").replace(/\\/g, "/")}`);
+    scenario.manifest.repositories.push({
+      url: `file:///${join(scenario.root, "missing.git").replace(/\\/g, "/")}`,
+      setup: [],
+      checks: { build: "true" },
+    });
     const results = await runSelfTest(
       config,
       scenario.manifest,
@@ -36,6 +49,7 @@ test("reports an unreachable remote and a failing model probe without leaking se
         throw new Error(`401 invalid x-api-key ${key}`);
       },
       scenario.root,
+      new RoutedCredentials(scenario.manifest, undefined),
     );
     const failed = results.filter((r) => r.outcome === "fail");
     assert.equal(failed.length, 2);
@@ -67,7 +81,7 @@ test("asks the GitHub App for write and read tokens on target repositories only"
     ["https://github.com/dbacks95fan/mealflow.git", "read"],
   ]);
   assert.ok(results.every((r) => r.outcome === "pass"));
-  assert.equal(results.length, 2, "intent repositories use their own token, checked separately");
+  assert.equal(results.length, 2, "intent repositories get no token");
 });
 
 test("fails each GitHub check when no app is configured or a token is refused", async () => {
@@ -93,16 +107,23 @@ test("fails each GitHub check when no app is configured or a token is refused", 
   assert.ok(!JSON.stringify(refused).includes(leaked));
 });
 
-test("the read-only probe passes only when GitHub refuses the push", () => {
-  assert.match(
-    judgeReadOnlyProbe(new Error("git push failed: remote: Write access to repository not granted.")),
-    /refused/,
+test("the intent refusal check passes only when the driver refuses every intent repository", async () => {
+  const refused = await intentRefusalChecks(GITHUB_MANIFEST, new RoutedCredentials(GITHUB_MANIFEST, undefined), []);
+  assert.deepEqual(
+    refused.map((r) => [r.name, r.outcome]),
+    [
+      ["intent repository is refused: https://github.com/dbacks95fan/intent-backlog.git", "pass"],
+      ["intent repository is refused: file:///C:/local/intents.git", "pass"],
+    ],
   );
-  assert.match(judgeReadOnlyProbe(new Error("remote: Permission to x/y.git denied to someone.")), /refused/);
-  assert.match(judgeReadOnlyProbe(new Error("The requested URL returned error: 403")), /refused/);
-  assert.throws(() => judgeReadOnlyProbe(undefined), /accepted, so it can write/);
-  assert.throws(
-    () => judgeReadOnlyProbe(new Error("Could not resolve host: github.com")),
-    /could not reach GitHub: Could not resolve host/,
+
+  const permissive = await intentRefusalChecks(
+    GITHUB_MANIFEST,
+    { tokenFor: async (_url, access) => (access === "read" ? "github_pat_should_not_exist_123" : undefined) },
+    ["github_pat_should_not_exist_123"],
   );
+  assert.ok(permissive.every((r) => r.outcome === "fail" && /would read this intent repository/.test(r.detail)));
+
+  const unconfigured = await intentRefusalChecks(GITHUB_MANIFEST, undefined, []);
+  assert.ok(unconfigured.every((r) => r.outcome === "fail" && /No credential router/.test(r.detail)));
 });

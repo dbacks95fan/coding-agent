@@ -59,14 +59,9 @@ test("secretValues lists every configured credential, including the GitHub App k
     const config = loadConfig({
       ...appEnv,
       ANTHROPIC_API_KEY: "sk-ant-key-123456",
-      CODING_AGENT_INTENT_TOKEN: "github_pat_intent_123",
       CODING_AGENT_API_TOKEN: "service-token-123",
     });
-    assert.equal(config.intentToken, "github_pat_intent_123");
-    assert.deepEqual(
-      secretValues(config).sort(),
-      [privateKey, "github_pat_intent_123", "service-token-123", "sk-ant-key-123456"].sort(),
-    );
+    assert.deepEqual(secretValues(config).sort(), [privateKey, "service-token-123", "sk-ant-key-123456"].sort());
   });
 });
 
@@ -121,4 +116,12 @@ test("reports an unreadable or unusable key file by path, never by content", () 
 
 test("refuses the retired single-token setting", () => {
   assert.throws(() => loadConfig({ CODING_AGENT_GIT_TOKEN: "github_pat_old" }), /no longer used/);
+});
+
+test("refuses an intent-backlog token without echoing it", () => {
+  assert.throws(
+    () => loadConfig({ CODING_AGENT_INTENT_TOKEN: "github_pat_intent_123" }),
+    (err: Error) =>
+      /CODING_AGENT_INTENT_TOKEN is no longer used/.test(err.message) && !err.message.includes("github_pat_intent_123"),
+  );
 });

@@ -35,12 +35,6 @@ test("cloneBranch and readBlob preserve exact bytes, including CRLF", async () =
   assert.equal(await driver.readBlob(dir, base, "missing.txt"), null);
 });
 
-test("fetchCommit retrieves a commit by SHA for byte-exact reads", async () => {
-  const dir = join(root, "fetch-one");
-  await driver.fetchCommit(remote.url, base, dir);
-  assert.equal((await driver.readBlob(dir, base, "README.md"))?.toString("utf8"), "hello\r\nworld\r\n");
-});
-
 test("commitCandidate folds agent commits into one candidate on the handoff", async () => {
   const dir = join(root, "clone-candidate");
   await driver.cloneBranch(remote.url, "work/INT-1", dir, root);
@@ -80,7 +74,7 @@ test("hooks planted in the workspace do not run during driver commits", async ()
   assert.equal(git(dir, ["status", "--porcelain"]), "");
 });
 
-test("asks for read access to fetch and clone, and write access only to push", async () => {
+test("asks for read access to list and clone, and write access only to push", async () => {
   const requests: [string, GitAccess][] = [];
   const recording = new DriverGit(
     join(root, "driver-home-creds"),
@@ -97,15 +91,14 @@ test("asks for read access to fetch and clone, and write access only to push", a
   const dir = join(root, "clone-creds");
   assert.equal(await recording.remoteTip(remote.url, "work/INT-3", root), base);
   await recording.cloneBranch(remote.url, "work/INT-3", dir, root);
-  await recording.fetchCommit(remote.url, base, join(root, "fetch-creds"));
   assert.deepEqual(
     requests.map(([, access]) => access),
-    ["read", "read", "read"],
+    ["read", "read"],
   );
 
   writeBytes(dir, "f.txt", "f");
   const candidate = await recording.commitCandidate(dir, base, "candidate");
-  assert.equal(requests.length, 3, "local operations ask for no token");
+  assert.equal(requests.length, 2, "local operations ask for no token");
   await recording.pushFastForward(dir, remote.url, candidate, "work/INT-3");
   assert.deepEqual(requests.at(-1), [remote.url, "write"]);
   assert.equal(remote.tip("work/INT-3"), candidate);

@@ -73,7 +73,6 @@ Describe 'set-nas-secrets' {
             ANTHROPIC_API_KEY                       = 'sk-ant-real-looking-value'
             CODING_AGENT_GITHUB_APP_ID              = '5555873'
             CODING_AGENT_GITHUB_APP_INSTALLATION_ID = '177232772'
-            CODING_AGENT_INTENT_TOKEN               = 'github_pat_read_only_looking_value'
             CODING_AGENT_API_TOKEN                  = 'x' * 40
         }
     }
@@ -88,7 +87,6 @@ Describe 'set-nas-secrets' {
         $problems | Should -Contain 'ANTHROPIC_API_KEY is not set'
         $problems | Should -Contain 'CODING_AGENT_GITHUB_APP_ID is not set'
         $problems | Should -Contain 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID is not set'
-        $problems | Should -Contain 'CODING_AGENT_INTENT_TOKEN is not set'
         $problems | Should -Contain 'CODING_AGENT_API_TOKEN is shorter than 32 characters'
         ($problems -join ' ') | Should -Not -Match 'tiny-secret-value'
     }
@@ -103,6 +101,13 @@ Describe 'set-nas-secrets' {
         $problems = Test-RuntimeSetting -Values $good
         $problems | Should -Contain 'CODING_AGENT_GIT_TOKEN is no longer used; remove it'
         ($problems -join ' ') | Should -Not -Match 'github_pat_old_value'
+    }
+
+    It 'refuses an intent-backlog token, which this agent must not hold' {
+        $good['CODING_AGENT_INTENT_TOKEN'] = 'github_pat_intent_value'
+        $problems = Test-RuntimeSetting -Values $good
+        $problems | Should -Contain 'CODING_AGENT_INTENT_TOKEN is no longer used; remove it'
+        ($problems -join ' ') | Should -Not -Match 'github_pat_intent_value'
     }
 
     It 'checks the GitHub App key file by path without showing its contents' {

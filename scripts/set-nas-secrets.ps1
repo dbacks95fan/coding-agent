@@ -19,7 +19,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'WindowsTools.ps1')
 
 # Settings the NAS needs. The installer checks the same list.
-$Required = @('ANTHROPIC_API_KEY', 'CODING_AGENT_GITHUB_APP_ID', 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID', 'CODING_AGENT_INTENT_TOKEN', 'CODING_AGENT_API_TOKEN')
+$Required = @('ANTHROPIC_API_KEY', 'CODING_AGENT_GITHUB_APP_ID', 'CODING_AGENT_GITHUB_APP_INSTALLATION_ID', 'CODING_AGENT_API_TOKEN')
+# Settings the service refuses to start with. The installer checks the same list.
+$Retired = @('CODING_AGENT_GIT_TOKEN', 'CODING_AGENT_INTENT_TOKEN')
 # A path on this PC. The key file is sent on its own; on the NAS, compose sets this to the container's copy.
 $KeyFileSetting = 'CODING_AGENT_GITHUB_APP_PRIVATE_KEY_FILE'
 
@@ -50,7 +52,9 @@ function Test-RuntimeSetting {
         $id = [string]$Values[$name]
         if ($id -and $id -notmatch '^\d+$') { $problems += "$name must be a number" }
     }
-    if ($Values.Contains('CODING_AGENT_GIT_TOKEN')) { $problems += 'CODING_AGENT_GIT_TOKEN is no longer used; remove it' }
+    foreach ($name in $Retired) {
+        if ($Values.Contains($name)) { $problems += "$name is no longer used; remove it" }
+    }
     foreach ($name in $Values.Keys) {
         if (([string]$Values[$name]) -match '/volume1') { $problems += "$name points at /volume1; this service lives on /volume2" }
     }

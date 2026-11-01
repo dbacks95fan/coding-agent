@@ -1,5 +1,5 @@
 // Copyright (c) 2026 DPSystems, LLC.
-// ABOUTME: Deployment self-test: toolchain, GitHub App tokens, Git remotes, a read-only intent token, and the model.
+// ABOUTME: Deployment self-test: toolchain, GitHub App tokens, Git remotes, intent-backlog refusal, and the model.
 // ABOUTME: Used by the installer before it reports a deployment as working.
 import Anthropic from "@anthropic-ai/sdk";
 import { join } from "node:path";
@@ -51,7 +51,7 @@ function recorder(results: SelfTestResult[], secrets: string[]): Recorder {
 /**
  * Asks the GitHub App for every token a run can need on a target repository: write
  * to push, read for everything else. Local remotes need none and are skipped.
- * Intent repositories use their own read-only token; see intentReadOnlyCheck.
+ * Intent repositories get no token at all; see intentRefusalChecks.
  */
 export async function githubAccessChecks(
   manifest: CheckManifest,
@@ -76,37 +76,30 @@ export async function githubAccessChecks(
 }
 
 /**
- * Judges a dry-run push made with the intent token. GitHub checks push permission
- * before a dry run ends, so acceptance means the token can write.
+ * Proves the driver refuses every intent repository, read or write, before any Git
+ * call. The frozen intent reaches this agent only as copies on the work branch.
  */
-export function judgeReadOnlyProbe(pushError: unknown): string {
-  if (pushError === undefined) {
-    throw new Error("A dry-run push with the intent token was accepted, so it can write; use a read-only token.");
+export async function intentRefusalChecks(
+  manifest: CheckManifest,
+  credentials: GitCredentials | undefined,
+  secrets: string[],
+): Promise<SelfTestResult[]> {
+  const results: SelfTestResult[] = [];
+  const record = recorder(results, secrets);
+  for (const url of manifest.intent_repositories) {
+    await record(`intent repository is refused: ${url}`, async () => {
+      if (!credentials) throw new Error("No credential router is configured, so nothing refuses this repository.");
+      for (const access of ["read", "write"] as const) {
+        const refused = await credentials.tokenFor(url, access).then(
+          () => false,
+          () => true,
+        );
+        if (!refused) throw new Error(`The driver would ${access} this intent repository; it must refuse.`);
+      }
+      return "The driver refuses read and write before any Git call.";
+    });
   }
-  const message = pushError instanceof Error ? pushError.message : String(pushError);
-  if (/denied|not granted|\b403\b/i.test(message)) return "GitHub refused a dry-run push with the intent token.";
-  throw new Error(`The read-only probe could not reach GitHub: ${message}`);
-}
-
-/** Proves the intent token cannot write, by a dry-run push that GitHub must refuse. */
-async function intentReadOnlyCheck(git: DriverGit, url: string, scratch: string, probeDir: string): Promise<string> {
-  const tip = (await git.run(["ls-remote", url, "HEAD"], scratch, { url, access: "read" })).split("\t")[0];
-  await git.fetchCommit(url, tip, probeDir);
-  let pushError: unknown;
-  try {
-    // A dry run: GitHub checks permission, and nothing is written even if it allows it.
-    await git.run(
-      ["push", "--dry-run", "--porcelain", url, `${tip}:refs/heads/coding-agent-read-only-probe`],
-      probeDir,
-      {
-        url,
-        access: "read",
-      },
-    );
-  } catch (err) {
-    pushError = err;
-  }
-  return judgeReadOnlyProbe(pushError);
+  return results;
 }
 
 export async function runSelfTest(
@@ -138,20 +131,14 @@ export async function runSelfTest(
   results.push(...(await githubAccessChecks(manifest, credentials, secrets)));
 
   const git = new DriverGit(join(scratch, "git-home"), config.gitIdentity, credentials);
-  const remotes = [...manifest.repositories.map((r) => r.url), ...manifest.intent_repositories];
-  for (const url of remotes) {
+  for (const url of manifest.repositories.map((r) => r.url)) {
     await record(`git read access: ${url}`, async () => {
       const out = await git.run(["ls-remote", "--heads", url], scratch, { url, access: "read" });
       return `${out.split("\n").filter(Boolean).length} branch(es) visible.`;
     });
   }
 
-  for (const [index, url] of manifest.intent_repositories.entries()) {
-    if (!githubRepository(url)) continue;
-    await record(`intent repository is read-only: ${url}`, () =>
-      intentReadOnlyCheck(git, url, scratch, join(scratch, `intent-probe-${index}`)),
-    );
-  }
+  results.push(...(await intentRefusalChecks(manifest, credentials, secrets)));
 
   await record(`model: ${config.model}`, probe);
   return results;

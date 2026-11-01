@@ -10,6 +10,7 @@
 - **Evidence location.** `.agent/work/<intent-id>/evidence-package/<invocation-id>.json`, committed after the candidate.
 - **Trusted check manifest is operator configuration.** It lives with the deployment, not in the product repository, so no spec or agent change can widen what runs.
 - **Transport.** Authenticated HTTP with submit-then-poll, one run at a time, results held in memory.
+- **No intent-backlog access.** Following agentic-sdlc (Governance and Artifacts, `2314c31`), the agent verifies only the frozen intent and policy-profile copies on the work branch against the freeze fingerprints. It holds no intent-backlog credential, refuses any Git call to an intent repository, and will not start if `CODING_AGENT_INTENT_TOKEN` is set. The fingerprint is the proof of integrity, so where the bytes are read from adds nothing.
 - **HTTP is the only way in.** The command for running one invocation from a file was removed. The agent runs only as the NAS service, using Claude through the API, so a second path would bypass the service's authentication and single-run guard.
 
 ## Open
