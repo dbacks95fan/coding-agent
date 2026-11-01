@@ -16,6 +16,5 @@
 ## Open
 
 - **Upstream clarification.** agentic-sdlc does not name, per stage, which StageInvocation field carries the handoff commit. A one-line note in Stage Contracts would remove the reliance on reading `target` this way.
-- **Conductor migration.** The Conductor must send StageInvocation 1.1 over HTTP and drop its v3-to-v2 adapter and its own pushes. Until it does, Execution through Trello will not reach this worker.
 - **Tool isolation.** Running the shell as a separate user would close the same-user secret exposure noted in SECURITY.md.
 - **Chromium on the NAS kernel.** Playwright's Chromium has not yet been exercised on the 3.10 kernel; the first real MealFlow run will show it.
