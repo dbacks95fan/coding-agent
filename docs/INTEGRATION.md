@@ -33,7 +33,4 @@ Before routing, the Conductor (read-only) should:
 
 ## Conductor status
 
-The Conductor (trello-orchestrator) sends the StageInvocation above over HTTP, polls for the result, and does not write to the product repository. With trello-orchestrator PR #16 it also performs steps 1, 2, and 4, compares Evidence Package validation outcomes to `required_validation` (step 3), records the StageInvocation and StageResult on the card, and sends a rework invocation with the failing Evaluation Package when an evaluation fails on implementation findings. It does not yet:
-
-- compare `policy_control_evidence` to the frozen profile (step 3);
-- send product scopes plus the evidence path as `write_paths`; it sends `["."]`.
+The Conductor (trello-orchestrator) sends the StageInvocation above over HTTP, polls for the result, and does not write to the product repository. With trello-orchestrator PR #16 it also performs steps 1 through 4: it compares Evidence Package validation outcomes to `required_validation` and requires every accepted policy control to be marked `addressed`. It also records the StageInvocation and StageResult on the card, and sends a rework invocation with the failing Evaluation Package when an evaluation fails on implementation findings. It does not yet send product scopes plus the evidence path as `write_paths`; it sends `["."]`.
