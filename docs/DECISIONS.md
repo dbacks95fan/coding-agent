@@ -2,7 +2,7 @@
 
 ## Decided
 
-- **Canonical contracts only.** The worker accepts StageInvocation 1.1 and Work Contract v3 and emits StageResult 1.0 and EvidencePackage 1.0, validated against the vendored agentic-sdlc schema (`urn:agentic-sdlc:lifecycle-contracts:1.2.0`). The earlier Work Contract v2 CLI was removed rather than kept alongside it, because the SDLC says consumers must reject older versions instead of coercing them.
+- **Canonical contracts only.** The worker accepts StageInvocation 1.1 and Work Contract v3 and emits StageResult 1.0 and EvidencePackage 1.0, validated against the vendored agentic-sdlc schema (`urn:agentic-sdlc:lifecycle-contracts:1.3.0`). The earlier Work Contract v2 CLI was removed rather than kept alongside it, because the SDLC says consumers must reject older versions instead of coercing them.
 - **Messages API engine.** The Claude Agent SDK was replaced by a direct Messages API loop because its bundled CLI cannot run on the NAS kernel. Model `claude-opus-5-5`, effort `high`, server-side refusal fallback on.
 - **The agent pushes its own work branch.** This follows the agentic-sdlc rule that agents, not the Conductor, push. Only `candidate_complete` pushes; the push is fast-forward only and blocked if the branch moved.
 - **Starting commit.** `StageInvocation.target.commit_sha` is the handoff commit Coding starts from; the Work Contract's `target` is the earlier product base and must be its ancestor.

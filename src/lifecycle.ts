@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import lifecycleSchema from "../schemas/lifecycle-contracts.schema.json" with { type: "json" };
 
 /** The schema version this worker was built against; checked by tests so drift is deliberate. */
-export const LIFECYCLE_SCHEMA_ID = "urn:agentic-sdlc:lifecycle-contracts:1.2.0";
+export const LIFECYCLE_SCHEMA_ID = "urn:agentic-sdlc:lifecycle-contracts:1.3.0";
 
 export type LifecycleDefinition =
   | "StageInvocation"
