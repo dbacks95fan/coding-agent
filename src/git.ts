@@ -132,13 +132,6 @@ export class DriverGit {
     });
   }
 
-  /** Fetches a single commit by SHA into a scratch repository for byte-exact reads. */
-  async fetchCommit(url: string, commit: string, dir: string): Promise<void> {
-    mkdirSync(dir, { recursive: true });
-    await this.run(["init", "--quiet", "--bare"], dir);
-    await this.run(["fetch", "--quiet", "--depth", "1", url, commit], dir, { url, access: "read" });
-  }
-
   async head(repoDir: string): Promise<string> {
     return this.run(["rev-parse", "HEAD"], repoDir);
   }

@@ -88,8 +88,9 @@ const INTENT_ID = "INT-T-0001";
 
 /**
  * Builds the state the SDLC hands to Execution: an intent-backlog commit holding the
- * frozen intent and profile, and a product work branch whose head carries the
- * frozen copies plus the accepted spec and Work Contract v3.
+ * frozen intent and profile (only so the freeze references name a real commit; the
+ * agent never reads it), and a product work branch whose head carries the frozen
+ * copies plus the accepted spec and Work Contract v3.
  */
 export function buildScenario(options: ScenarioOptions = {}): Scenario {
   const root = tempDir("scenario-");

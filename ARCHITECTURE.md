@@ -42,11 +42,11 @@ Stage Contracts say a later worker "checks out the exact commit SHA in its Stage
 Nothing reaches the model until all of these hold, and each failure is reported as a `blocked` finding:
 
 - The invocation is a valid 1.1 record for `execution`, its work item equals the freeze's, and `workspace_ref` is `work/<intent-id>`.
-- The target and intent-backlog repositories are in the operator's manifest.
+- The target repository, and the intent-backlog repository the freeze names as its source, are in the operator's manifest. The intent backlog is only named, never contacted.
 - `input_artifacts` contain exactly one `.agent/work/<id>/spec.md`, one `.agent/work/<id>/work-contract.yaml`, and at most one `.agent/work/<id>/evaluation-package/*.json`.
 - The remote branch tip equals the handoff, so no other writer is active.
 - Each accepted artifact hashes correctly at its recorded commit, that commit is in the branch history, and the bytes are unchanged at the handoff.
-- The frozen intent and profile copies at the handoff, and the originals in intent-backlog, match the freeze fingerprints. Line-ending conversion is disabled for every driver Git call, so a converted copy fails.
+- The frozen intent and profile copies at the handoff match the freeze fingerprints. Line-ending conversion is disabled for every driver Git call, so a converted copy fails.
 - The Work Contract is valid v3 and its work item, intent, and policy-profile references equal the freeze's; its base commit is in the branch history.
 - On rework, the Evaluation Package is valid, has status `fail`, and evaluated a commit in the branch history.
 - Every `required_validation` entry matches the manifest's trusted command exactly.

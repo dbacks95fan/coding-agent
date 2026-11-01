@@ -32,8 +32,6 @@ export interface RuntimeConfig {
   limits: AgentLimits;
   /** Absent when no remote needs credentials, as with local test repositories. */
   githubApp?: GitHubAppSettings;
-  /** Read-only token for the intent repositories, which the GitHub App is not installed on. */
-  intentToken?: string;
   gitIdentity: { name: string; email: string };
   apiToken?: string;
   manifestPath: string;
@@ -104,6 +102,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       "CODING_AGENT_GIT_TOKEN is no longer used; remove it and set the CODING_AGENT_GITHUB_APP_* settings instead.",
     );
   }
+  // Refused rather than ignored, so a stray intent-backlog credential cannot linger on the host.
+  if (env.CODING_AGENT_INTENT_TOKEN) {
+    throw new Error(
+      "CODING_AGENT_INTENT_TOKEN is no longer used; remove it. This agent reads the frozen copies on the work branch, never the intent backlog.",
+    );
+  }
 
   const commandEnv: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
@@ -135,7 +139,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       maxToolOutputChars: number(env, "CODING_AGENT_MAX_TOOL_OUTPUT_CHARS", 30_000),
     },
     githubApp: githubAppSettings(env),
-    intentToken: env.CODING_AGENT_INTENT_TOKEN || undefined,
     gitIdentity: {
       name: env.CODING_AGENT_GIT_NAME ?? "coding-agent",
       email: env.CODING_AGENT_GIT_EMAIL ?? "coding-agent@users.noreply.github.com",
@@ -151,7 +154,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
 
 /** Values that must be scrubbed from any text this process emits. */
 export function secretValues(config: RuntimeConfig): string[] {
-  return [config.anthropicApiKey, config.githubApp?.privateKey, config.intentToken, config.apiToken].filter(
-    (v): v is string => Boolean(v),
-  );
+  return [config.anthropicApiKey, config.githubApp?.privateKey, config.apiToken].filter((v): v is string => Boolean(v));
 }

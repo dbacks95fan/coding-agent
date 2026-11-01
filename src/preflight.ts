@@ -61,6 +61,8 @@ export async function prepareWorkspace(
   const specBytes = await verifyAccepted(git, workspace, handoff, admitted.spec, reasons);
   const contractBytes = await verifyAccepted(git, workspace, handoff, admitted.workContract, reasons);
 
+  // The copies on the branch are the only frozen inputs this agent reads; it never contacts the
+  // intent backlog. The freeze fingerprints make any changed byte fail here.
   const intentCopy = await git.readBlob(workspace, handoff, admitted.frozenIntentPath);
   const profileCopy = await git.readBlob(workspace, handoff, admitted.frozenProfilePath);
   checkFingerprint(intentCopy, freeze.intent.sha256, `the frozen intent copy ${admitted.frozenIntentPath}`, reasons);
@@ -70,8 +72,6 @@ export async function prepareWorkspace(
     `the frozen policy profile copy ${admitted.frozenProfilePath}`,
     reasons,
   );
-
-  await verifySources(git, runDir, [freeze.intent, freeze.policy_profile], reasons);
 
   let workContract: WorkContract | undefined;
   if (contractBytes) {
@@ -145,27 +145,6 @@ async function verifyAccepted(
     return null;
   }
   return atRecorded;
-}
-
-/** Confirms the frozen originals in the intent backlog, not just the copies on the work branch. */
-async function verifySources(git: DriverGit, runDir: string, refs: ArtifactRef[], reasons: string[]): Promise<void> {
-  const fetched = new Map<string, string>();
-  for (const ref of refs) {
-    const key = `${normalizeRepoUrl(ref.repository)}@${ref.commit_sha}`;
-    let dir = fetched.get(key);
-    if (!dir) {
-      dir = join(runDir, "sources", String(fetched.size));
-      try {
-        await git.fetchCommit(ref.repository, ref.commit_sha, dir);
-      } catch (err) {
-        reasons.push(`Could not fetch frozen source ${ref.repository}@${ref.commit_sha}: ${(err as Error).message}`);
-        continue;
-      }
-      fetched.set(key, dir);
-    }
-    const bytes = await git.readBlob(dir, ref.commit_sha, ref.path);
-    checkFingerprint(bytes, ref.sha256, `the frozen source ${ref.path}@${ref.commit_sha}`, reasons);
-  }
 }
 
 async function verifyWorkContract(

@@ -53,8 +53,7 @@ async function main(argv: string[]): Promise<number> {
   if (privileges === "dropped") log("privileges_dropped", { uid: process.getuid?.() });
   // One app instance per process, so runs and self-tests reuse tokens until they near expiry.
   const appCredentials = config.githubApp ? new GitHubAppCredentials(config.githubApp) : undefined;
-  const credentialsFor: CredentialsFor = (manifest) =>
-    new RoutedCredentials(manifest, config.intentToken, appCredentials);
+  const credentialsFor: CredentialsFor = (manifest) => new RoutedCredentials(manifest, appCredentials);
   mkdirSync(config.workRoot, { recursive: true });
 
   if (command === "serve") {
