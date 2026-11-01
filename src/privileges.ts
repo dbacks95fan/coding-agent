@@ -2,7 +2,7 @@
 // ABOUTME: Drops from container root to the service user once secrets are loaded. Job commands run as that same
 // ABOUTME: user, but after the drop the kernel hides this process's environment and memory from them.
 
-/** The image's `agent` user and group; the work and cache volumes are owned by them. */
+/** The image's `evaluator` user and group; the work and cache volumes are owned by them. */
 export const SERVICE_UID = 10001;
 export const SERVICE_GID = 999;
 

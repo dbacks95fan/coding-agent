@@ -31,12 +31,9 @@ Before routing, the Conductor (read-only) should:
 
 `needs_decision`, `blocked`, and `failed` push nothing; their reasons are in `stage_result.findings`, with more detail in `diagnostics` (not a lifecycle record).
 
-## Not yet done on the Conductor side
+## Conductor status
 
-The Conductor (trello-orchestrator) sends the StageInvocation above over HTTP, polls for the result, and does not write to the product repository. Of the checks under "Verify the result", it validates the StageResult and Evidence Package schemas and the invocation identity, but it does not yet:
+The Conductor (trello-orchestrator) sends the StageInvocation above over HTTP, polls for the result, and does not write to the product repository. With trello-orchestrator PR #16 it also performs steps 1, 2, and 4, compares Evidence Package validation outcomes to `required_validation` (step 3), records the StageInvocation and StageResult on the card, and sends a rework invocation with the failing Evaluation Package when an evaluation fails on implementation findings. It does not yet:
 
-- confirm the branch tip, candidate parent, and evidence file hash (step 2);
-- compare Evidence Package validation outcomes to `required_validation`, or policy-control evidence to the frozen profile (step 3);
-- record a `StageResultDecision` (step 4).
-
-It also sends `write_paths: ["."]` rather than product scopes plus the evidence path.
+- compare `policy_control_evidence` to the frozen profile (step 3);
+- send product scopes plus the evidence path as `write_paths`; it sends `["."]`.
